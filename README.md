@@ -12,7 +12,7 @@ It works on phones, tablets, computers and TVs, in English, Hindi and Bengali. T
 - **Light crackers yourself.** Tap the sky to send up a rocket. Press and hold anywhere to open the cracker wheel, slide towards the one you want and let go.
 - **Send a greeting to someone.** Write their name, your name and a short wish, and get a link (and a QR code) to share. When they open it, *their* name lights up the sky, followed by your wish and "with love from" you.
 - **Choose the language.** Use the small **A | अ | অ** switch on the cards: the sky says *Happy Diwali*, *शुभ दीपावली* or *শুভ দীপাবলি*, with the year in matching numerals.
-- **Scan a greeting.** Point your camera at a greeting's QR code, on a friend's phone, a TV or a printout, and it opens right away.
+- **Scan a greeting.** Point your camera at a greeting's QR code, on a friend's phone, a TV or a printout, and it opens right away. Other QR codes (a menu, a payment code) are simply ignored, so you can keep pointing until it finds the greeting.
 - **Save a video.** Record the whole show, sound included, and share it on WhatsApp or anywhere else.
 - **Install it as an app.** Add it to your home screen. It opens full screen and works even without internet.
 

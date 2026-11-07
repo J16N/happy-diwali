@@ -356,10 +356,18 @@ const ui = new UI({
   scan: openScanner,
   closeScan: closeScanner,
   async scanFile(file) {
+    // Put the dialog back as it was if the photo has no greeting in it.
+    const before = ui.el.scanStatus.textContent;
+    const wasOff = ui.el.scan.querySelector('.viewfinder').classList.contains('off');
     ui.scanStatus('Reading the photo…', { off: true });
     try {
-      const text = await scanner.decodeFile(file);
-      if (text) handleScanned(text);
+      const { found, text } = await scanner.decodeFile(file);
+      if (text) {
+        ui.scanStatus('', { off: true });
+        handleScanned(text);
+      }
+      // A QR code that is not a greeting is ignored, like it is by the camera.
+      else if (found) ui.scanStatus(before, { off: wasOff });
       else ui.scanStatus('No QR code found in that photo. Try a sharper, closer one.', { off: true });
     } catch {
       ui.scanStatus('That photo could not be read.', { off: true });
@@ -385,6 +393,7 @@ ui.setInstall(installMode());
 
 // ---- QR scanner -----------------------------------------------------------------
 const scanner = new Scanner(document.getElementById('scan-video'), {
+  accept: (text) => !!asGreeting(text), // anything else (a menu, a payment code) is ignored
   onResult: (text) => handleScanned(text),
   onStatus: (text) => ui.scanStatus(text, { off: !!text }),
 });
@@ -416,20 +425,15 @@ function asGreeting(text) {
   return samePage ? url : null;
 }
 
+/** A greeting link was scanned (the scanner only reports those): open it. */
 function handleScanned(text) {
-  navigator.vibrate?.(30);
   const url = asGreeting(text);
-  if (url) {
-    scanned = url.toString();
-    const to = sanitize(url.searchParams.get('to') ?? url.searchParams.get('name') ?? '');
-    ui.scanFound(to ? `A greeting for ${to}` : 'A Diwali greeting', { label: 'Open greeting' });
-    // A greeting from this site: open it straight away.
-    setTimeout(() => scanned && !ui.el.scan.hidden && location.assign(scanned), 700);
-  } else {
-    // Something else: show it, but never open a foreign link by ourselves.
-    scanned = '';
-    ui.scanFound(`This QR code is not a Diwali greeting: ${text.slice(0, 200)}`, { label: '' });
-  }
+  if (!url) return;
+  navigator.vibrate?.(30);
+  scanned = url.toString();
+  const to = sanitize(url.searchParams.get('to') ?? url.searchParams.get('name') ?? '');
+  ui.scanFound(to ? `A greeting for ${to}` : 'A Diwali greeting', { label: 'Open greeting' });
+  setTimeout(() => scanned && !ui.el.scan.hidden && location.assign(scanned), 700);
 }
 
 // The installed app should scan offline too: on browsers without a built-in
@@ -656,7 +660,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 // Handy for debugging from the console.
 window.__diwali = {
-  sim, renderer, wheel,
+  sim, renderer, wheel, sound, recorder,
   /** Render the latest frame and return it as an image (used to make og-image.jpg). */
   snapshot(type = 'image/jpeg') {
     if (sim.frame) renderer.render(sim.frame, sim.view);

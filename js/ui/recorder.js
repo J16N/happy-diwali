@@ -1,6 +1,12 @@
 // Records the show (canvas + synthesised sound) into a video file with
 // MediaRecorder. MP4 is preferred (plays everywhere, WhatsApp included);
 // browsers that cannot write MP4 produce WebM.
+//
+// Keeping sound and picture in sync: the file is written in one piece when
+// recording stops. Asking for chunks as it goes (start(timeslice)) made
+// Chrome's MP4 writer drop audio at chunk boundaries, and because MP4 audio
+// is laid end to end, every dropped piece moved the rest of the soundtrack
+// earlier (we measured up to 0.6 s). See also Sound.captureStream().
 
 const TYPES = [
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
@@ -43,7 +49,7 @@ export class Recorder {
         res(new Blob(this.chunks, { type: type.split(';')[0] }));
       };
     });
-    this.rec.start(1000);
+    this.rec.start(); // no timeslice: see the note at the top
     this.started = performance.now();
   }
 

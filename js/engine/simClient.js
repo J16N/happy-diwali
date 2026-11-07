@@ -51,9 +51,13 @@ class RemoteSim {
     this.rafMs = 16.7; // display refresh interval (smoothed)
     this.back = []; // buffers of shown frames, to hand back for reuse
     this.stepMs = 0; // the worker's time for the last step
+    this.sound = sound;
+    this.sounds = []; // sounds of frames not shown yet
     worker.onmessage = ({ data: m }) => {
       if (m.t === 'frame') {
-        for (const [name, args] of m.sounds) sound[name]?.(...args);
+        // Played when the frame is drawn, not when it arrives, so a bang
+        // never comes ahead of its flash (or of it in a recording).
+        for (const call of m.sounds) this.sounds.push(call);
         const f = { time: m.time, shift: m.shift, far: {}, near: {} };
         for (const key of BATCHES) {
           const dot = key.indexOf('.');
@@ -113,6 +117,8 @@ class RemoteSim {
       this.fresh = null;
       const v = this.view;
       [v.ox, v.oy, v.sx, v.sy] = out.shift;
+      for (const [name, args] of this.sounds) this.sound[name]?.(...args);
+      this.sounds.length = 0;
     }
     if (!this.busy) this._post();
     return out;

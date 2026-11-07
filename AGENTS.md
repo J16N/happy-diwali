@@ -84,7 +84,7 @@ js/
     wheel.js            the cracker wheel
     crackers.js         wheel catalogue and SVG icons
     qr.js               QR generator (byte mode, level M, versions 1-40)
-    scanner.js          QR scanner (BarcodeDetector, else jsQR)
+    scanner.js          QR scanner (BarcodeDetector, else jsQR); only greeting links stop it
     install.js          beforeinstallprompt / iOS instructions
     recorder.js         MediaRecorder video capture
   vendor/jsQR.min.js    vendored decoder (do not edit)
@@ -151,6 +151,21 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 - Names from a link are never stored. localStorage keys (`STORAGE_KEYS`): `diwali.name` (the visitor's own name), `diwali.lang`, `diwali.muted`, `diwali.cracker`.
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.
 - Limits (`LIMITS`): own name 40, share To/From 30 (silent), wish 50 (with counter), 4 words per scene, 10 emoji scenes. Wishes always wrap into at most 4 sky lines.
+
+### QR scanner
+
+The scanner only reacts to greeting links for this page (`asGreeting` in `main.js`, passed as `accept`). Any other code is skipped without a message and the camera keeps scanning; with several codes in view, the greeting wins. A chosen photo with only other codes leaves the dialog as it was; a photo with no code at all, or one that cannot be read, still says so.
+
+### Recording and A/V sync
+
+Measured by recording through the real Record path with markers: a fully white frame and a 1 kHz beep (fed straight into the recording tap) started in the same animation frame every 2 s, then comparing flash and beep onsets in the file with ffmpeg (`signalstats` YAVG per frame, audio threshold). Findings, Chrome:
+
+- Chrome's MP4 writer lays audio end to end and ignores its timestamps, so any audio it loses moves everything after it earlier. With `MediaRecorder.start(1000)` it lost audio at chunk boundaries: the sound ran 0.39 to 0.6 s ahead of the picture. `recorder.js` therefore calls `start()` with no timeslice (one blob at stop).
+- Silent stretches (muted, or quiet moments) can also turn into gaps, so `Sound.captureStream()` adds an inaudible constant (-80 dB) to the tap while recording.
+- In the worker setup, a frame's sounds are played when that frame is drawn (`simClient.js`), not when it arrives.
+- Result: +47 ms (sound after picture: the AAC encoder delay, which Chrome does not write into the file), constant over the whole recording; +14 to +48 ms with a heavily loaded page thread; within about ±50 ms with Canvas 2D. A starved audio thread (60 ms stalls) shifted MP4 audio once by the time lost (about 60 ms) and then stayed put; WebM is immune to that but plays poorly in WhatsApp, so MP4 stays preferred.
+- The show's own distance delay (a far shell's bang arrives after its flash, up to ~1.4 s, at the speed of sound) is deliberate and is in the video too.
+- `window.__diwali.sound` and `.recorder` are there for such tests.
 
 ### Full screen
 

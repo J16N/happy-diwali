@@ -8,7 +8,7 @@ const MAX_SIDE = 720; // frames are scaled down before decoding: faster, just as
 
 let decoderPromise = null;
 
-/** -> async (source: CanvasImageSource, w, h) => string | null */
+/** -> async (source: CanvasImageSource, w, h) => string[] (every code found) */
 function getDecoder() {
   decoderPromise ??= (async () => {
     if ('BarcodeDetector' in self) {
@@ -16,7 +16,7 @@ function getDecoder() {
         const formats = await BarcodeDetector.getSupportedFormats();
         if (formats.includes('qr_code')) {
           const det = new BarcodeDetector({ formats: ['qr_code'] });
-          return async (source) => (await det.detect(source))[0]?.rawValue ?? null;
+          return async (source) => (await det.detect(source)).map((c) => c.rawValue).filter(Boolean);
         }
       } catch {
         /* fall through to jsQR */
@@ -31,7 +31,8 @@ function getDecoder() {
       canvas.height = Math.max(1, Math.round(h * k));
       ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
       const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      return self.jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })?.data ?? null;
+      const text = self.jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })?.data;
+      return text ? [text] : [];
     };
   })();
   return decoderPromise;
@@ -45,7 +46,10 @@ export function warmUpDecoder() {
 export const hasCamera = () => !!navigator.mediaDevices?.getUserMedia;
 
 export class Scanner {
-  /** hooks: { onResult(text), onStatus(text) } */
+  /**
+   * hooks: { accept(text) -> bool, onResult(text), onStatus(text) }
+   * Codes that `accept` turns down are skipped and scanning goes on.
+   */
   constructor(video, hooks) {
     this.video = video;
     this.hooks = hooks;
@@ -89,7 +93,7 @@ export class Scanner {
       const v = this.video;
       if (v.readyState >= 2 && v.videoWidth) {
         try {
-          const text = await decode(v, v.videoWidth, v.videoHeight);
+          const text = (await decode(v, v.videoWidth, v.videoHeight)).find(this.hooks.accept);
           if (text && this.running) {
             this.stop();
             this.hooks.onResult(text);
@@ -113,12 +117,13 @@ export class Scanner {
     if (this.video) this.video.srcObject = null;
   }
 
-  /** Decode a QR code from an image file. -> text or null */
+  /** Decode a QR code from an image file. -> { found: any code at all, text: an accepted one or null } */
   async decodeFile(file) {
     const decode = await getDecoder();
     const bitmap = await createImageBitmap(file);
     try {
-      return await decode(bitmap, bitmap.width, bitmap.height);
+      const codes = await decode(bitmap, bitmap.width, bitmap.height);
+      return { found: codes.length > 0, text: codes.find(this.hooks.accept) ?? null };
     } finally {
       bitmap.close?.();
     }

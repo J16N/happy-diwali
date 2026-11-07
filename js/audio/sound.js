@@ -42,6 +42,14 @@ export class Sound {
     if (!this.tap) {
       this.tap = this.ctx.createMediaStreamDestination();
       this.master.connect(this.tap);
+      // An inaudible signal (-80 dB) so the recorded audio never goes fully
+      // silent (muted, or a quiet moment in the show): a silent stretch can
+      // arrive as a gap, and an MP4 writer closes gaps by moving all later
+      // sound earlier.
+      this.keepAlive = this.ctx.createConstantSource();
+      this.keepAlive.offset.value = 1e-4;
+      this.keepAlive.connect(this.tap);
+      this.keepAlive.start();
     }
     return this.tap.stream;
   }
@@ -49,8 +57,10 @@ export class Sound {
   /** Stop feeding the recorder (it costs a little CPU for as long as it is connected). */
   releaseStream() {
     if (!this.tap) return;
+    this.keepAlive.stop();
+    this.keepAlive.disconnect();
     this.master.disconnect(this.tap);
-    this.tap = null;
+    this.tap = this.keepAlive = null;
   }
 
   setMuted(muted) {
