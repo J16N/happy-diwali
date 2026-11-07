@@ -1,16 +1,16 @@
-// Entry point: picks a renderer (WebGL2, else Canvas 2D), wires the world,
-// director, sound, wheel and UI together, and runs the render loop.
+// Entry point: picks a renderer (WebGL2, else Canvas 2D), starts the
+// simulation (in a worker when possible), wires sound, wheel and UI
+// together, and runs the render loop.
 
 import { BUDGET, GREETINGS, HOLD_MS, LIMITS, STORAGE_KEYS } from './config.js';
-import { World } from './engine/world.js';
+import { createSim } from './engine/simClient.js';
 import { buildAtlas, buildCloudTexture, buildSmokeTexture } from './engine/atlas.js';
 import { GLRenderer } from './engine/render/gl.js';
 import { CanvasRenderer } from './engine/render/canvas.js';
 import { Sound } from './audio/sound.js';
-import { Director } from './show/director.js';
 import { centralBox } from './show/textRaster.js';
 import { sanitize } from './show/nameParser.js';
-import { Clouds, Diyas, StringLights, buildLayers } from './ui/backdrop.js';
+import { buildLayers } from './ui/backdrop.js';
 import { UI } from './ui/ui.js';
 import { Wheel } from './ui/wheel.js';
 import { Recorder, canRecord } from './ui/recorder.js';
@@ -59,18 +59,22 @@ const atlas = buildAtlas();
 const cloudTex = buildCloudTexture();
 renderer.setTextures(atlas.canvas, buildSmokeTexture(), cloudTex.canvas);
 
-const world = new World(sound, BUDGET[renderer.kind], atlas.cells);
-const diyas = new Diyas(atlas.cells);
-const bulbs = new StringLights();
-const clouds = new Clouds(cloudTex.cells);
-const director = new Director(world, {
-  announce: (text) => ui.announce(text),
-  done: () => {
-    ui.showHint();
-    // A recording of the show ends a few seconds after the finale.
-    if (recorder.active) setTimeout(() => recorder.active && finishRecording(), 3500);
+const sim = await createSim({
+  sound,
+  budget: BUDGET[renderer.kind],
+  cells: atlas.cells,
+  cloudCells: cloudTex.cells,
+  worker: params.get('worker') !== '0',
+  hooks: {
+    announce: (text) => ui.announce(text),
+    done: () => {
+      ui.showHint();
+      // A recording of the show ends a few seconds after the finale.
+      if (recorder.active) setTimeout(() => recorder.active && finishRecording(), 3500);
+    },
   },
 });
+document.documentElement.dataset.sim = sim.mode;
 
 // Names. Two different people can be involved:
 //   me    the visitor's own name, typed into the welcome dialog. It is the
@@ -102,10 +106,7 @@ function leaveLink() {
 }
 
 const reduced = prefersReducedMotion();
-if (reduced) {
-  world.flashScale = 0.45;
-  world.view.parallax = false;
-}
+if (reduced) sim.setReduced();
 
 // ---- quality ----------------------------------------------------------------
 const coarse = matchMedia('(pointer: coarse)').matches;
@@ -113,7 +114,7 @@ let level = coarse ? 1 : 0;
 let dpr = 1;
 function setLevel(next) {
   level = next;
-  world.setQuality(level);
+  sim.setQuality(level);
   renderer.bloom = renderer.kind === 'webgl' && level < 2;
   layout();
 }
@@ -121,6 +122,7 @@ function setLevel(next) {
 // ---- layout -----------------------------------------------------------------
 let size = { w: 0, h: 0 };
 let recording = false;
+let redraw = false;
 function layout() {
   const w = Math.max(1, innerWidth);
   const h = Math.max(1, innerHeight);
@@ -129,12 +131,11 @@ function layout() {
   // file stays small enough to send in a chat.
   if (recording) dpr = Math.max(0.5, Math.min(dpr, 1280 / Math.max(w, h)));
   renderer.resize(w, h, dpr);
-  world.resize(w, h);
-  const data = buildLayers(world.view, dpr);
+  sim.resize(w, h);
+  const data = buildLayers(sim.view, dpr);
   renderer.setLayers(data);
-  bulbs.set(data.bulbs);
-  diyas.resize(world.view);
-  clouds.resize(world.view);
+  sim.setBulbs(data.bulbs);
+  redraw = true; // resizing cleared the canvas
   return { w, h };
 }
 
@@ -146,13 +147,10 @@ const onResize = debounce(() => {
   if (typing && innerWidth === size.w && innerHeight < size.h) return;
   const prev = size;
   size = layout();
-  if (!director.token || !prev.w) return;
+  if (!sim.running || !prev.w) return;
   const flipped = prev.w < prev.h !== size.w < size.h;
   const big = Math.abs(size.w - prev.w) / prev.w > 0.15 || Math.abs(size.h - prev.h) / prev.h > 0.3;
-  if (flipped || big) {
-    world.clear();
-    director.restartScene(); // re-rasterise the current scene for the new shape
-  }
+  if (flipped || big) sim.restartScene(); // re-rasterise the current scene for the new shape
 }, 180);
 
 addEventListener('resize', onResize);
@@ -172,10 +170,9 @@ let hintTimer = 0;
 function startShow() {
   if (sound.available && !sound.muted) sound.unlock();
   cancelPress();
-  world.clear();
   ui.hideWelcome();
   ui.hideShare();
-  director.start(name, 0, { sender: from, message, lang });
+  sim.start(name, 0, { sender: from, message, lang });
   clearTimeout(hintTimer);
   hintTimer = setTimeout(() => ui.showHint(), 4500);
 }
@@ -311,8 +308,7 @@ const ui = new UI({
   },
   replay: () => startShow(),
   changeName() {
-    director.stop();
-    world.clear();
+    sim.stop();
     cancelPress();
     ui.showWelcome({ name: link.to ? me : name, lang: myLang });
   },
@@ -455,15 +451,15 @@ const wheel = new Wheel({
 function fireItem(item, x, y) {
   if (!item) return;
   store.set(STORAGE_KEYS.cracker, item.id);
-  director.fire(item.id, x, y);
+  sim.fire(item.id, x, y);
   ui.hideHint();
 }
 
 /** Where a tap launches its rocket: inside the sky, above the terrace. */
 function tapAt(x, y) {
-  const v = world.view;
+  const v = sim.view;
   sound.unlock();
-  director.tapShell(clamp(x, 10, v.W - 10), clamp(y, v.H * 0.06, v.floorTop - 70 * v.S));
+  sim.tapShell(clamp(x, 10, v.W - 10), clamp(y, v.H * 0.06, v.floorTop - 70 * v.S));
   ui.hideHint();
 }
 
@@ -508,7 +504,7 @@ addEventListener('pointerdown', (e) => {
 
 addEventListener('pointermove', (e) => {
   if (e.pointerType === 'mouse' && !press && !ui.modalOpen) {
-    world.view.look((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1);
+    sim.look((e.clientX / innerWidth) * 2 - 1, (e.clientY / innerHeight) * 2 - 1);
   }
   if (!press || e.pointerId !== press.id) return;
   if (press.open) {
@@ -550,7 +546,7 @@ addEventListener('blur', cancelPress);
 if (!reduced) {
   addEventListener('deviceorientation', (e) => {
     if (e.gamma == null || e.beta == null) return;
-    world.view.look(clamp(e.gamma / 25, -1, 1), clamp((e.beta - 50) / 25, -1, 1));
+    sim.look(clamp(e.gamma / 25, -1, 1), clamp((e.beta - 50) / 25, -1, 1));
   });
 }
 
@@ -583,7 +579,7 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'c' || e.key === 'C') openScanner();
   else if ((e.key === 'q' || e.key === 'Q') && !press) {
     sound.unlock();
-    const b = centralBox(world.view);
+    const b = centralBox(sim.view);
     keyWheel = true;
     ui.hideHint();
     wheel.open(b.x + b.w / 2, b.y + b.h / 2);
@@ -601,37 +597,44 @@ document.addEventListener('visibilitychange', () => {
 
 // ---- render loop ------------------------------------------------------------
 let last = performance.now();
+let lastShown = last;
 let avgMs = 16.7;
 let frames = 0;
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const rawMs = Math.min(now - last, 100);
+  const dt = Math.min(now - last, 100) / 1000;
   last = now;
-  const dt = Math.min(rawMs / 1000, 0.05);
 
-  // Adaptive quality: if we keep missing ~40fps, step the quality down.
-  // One-off stalls (a dialog opening, a backdrop rebuild, a tab switch) are
-  // not a slow device: only sustained slowness lowers the quality.
-  if (rawMs < 80) avgMs = avgMs * 0.94 + rawMs * 0.06;
-  if (++frames % 90 === 0 && frames > 180 && avgMs > 27 && level < 2) {
-    setLevel(level + 1);
-    avgMs = 16.7; // judge the new level on its own frames
+  const f = sim.tick(dt);
+  if (f) {
+    // Adaptive quality, judged on how often a new frame is shown (with the
+    // simulation in a worker, a slow step shows up here, not as a slow
+    // callback). If we keep missing ~40fps, step the quality down. One-off
+    // stalls (a dialog opening, a backdrop rebuild, a tab switch) are not a
+    // slow device: only sustained slowness lowers the quality. Checked
+    // before drawing: a new level clears the canvas, which must not show.
+    const shownMs = Math.min(now - lastShown, 100);
+    lastShown = now;
+    if (shownMs < 80) avgMs = avgMs * 0.94 + shownMs * 0.06;
+    if (++frames % 90 === 0 && frames > 180 && avgMs > 27 && level < 2) {
+      setLevel(level + 1);
+      avgMs = 16.7; // judge the new level on its own frames
+    }
   }
-
-  director.update(dt);
-  world.update(dt);
-  diyas.update(dt, world);
-  clouds.update(dt, world.wind);
-  renderer.render(world.collect([clouds, bulbs, diyas]), world.view);
+  const show = f ?? (redraw ? sim.frame : null);
+  if (show) {
+    renderer.render(show, sim.view);
+    redraw = false;
+  }
 }
 
 // ---- boot -------------------------------------------------------------------
-world.setQuality(level);
+sim.setQuality(level);
 renderer.bloom = renderer.kind === 'webgl' && level < 2;
 size = layout();
 ui.setMuted(sound.muted);
-diyas.ignite(null); // light the diyas behind the welcome card (no sound yet: browsers block it)
+sim.igniteDiyas(); // light the diyas behind the welcome card
 if (link.to) ui.showGift(link, GREETINGS[lang].card);
 else ui.showWelcome({ name: me, lang: myLang });
 
@@ -640,7 +643,7 @@ const action = params.get('action');
 if (action === 'send' || action === 'scan') {
   history.replaceState(null, '', location.pathname + location.hash);
   ui.hideWelcome();
-  director.start(name, 0, { lang });
+  sim.start(name, 0, { lang });
   if (action === 'send') ui.h.share();
   else openScanner();
 }
@@ -653,10 +656,10 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 // Handy for debugging from the console.
 window.__diwali = {
-  world, director, renderer, wheel,
-  /** Render one frame and return it as an image (used to make og-image.jpg). */
+  sim, renderer, wheel,
+  /** Render the latest frame and return it as an image (used to make og-image.jpg). */
   snapshot(type = 'image/jpeg') {
-    renderer.render(world.collect([clouds, bulbs, diyas]), world.view);
+    if (sim.frame) renderer.render(sim.frame, sim.view);
     return renderer.canvas.toDataURL(type, 0.92);
   },
 };

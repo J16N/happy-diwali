@@ -1,13 +1,13 @@
 // Local development server: serves the folder with caching turned off, so a
 // reload always shows your latest edits. No dependencies.
-//   node tools/serve.mjs [port]      (default 8080)
+//   node tools/serve.mjs [port] [folder]   (default 8080, the project folder)
 
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
 const port = Number(process.argv[2] || process.env.PORT || 8080);
+const root = process.argv[3] || new URL('..', import.meta.url).pathname;
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',

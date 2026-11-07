@@ -83,6 +83,13 @@ export class LightBatch extends Batch {
   }
 }
 
+/** Every batch of a Frame by name, for sending frames between threads. */
+export const BATCHES = ['far.glow', 'far.smoke', 'near.glow', 'near.smoke', 'sprites', 'clouds', 'lights'];
+export const batchOf = (frame, key) => {
+  const dot = key.indexOf('.');
+  return dot < 0 ? frame[key] : frame[key.slice(0, dot)][key.slice(dot + 1)];
+};
+
 /** Everything the renderer needs for one frame. */
 export class Frame {
   constructor() {

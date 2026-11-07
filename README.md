@@ -4,7 +4,7 @@ A Diwali greeting that writes your name across the night sky in fireworks.
 
 Open the page, type your name, and watch rockets rise from a rooftop terrace lit with diyas and burst into **Happy Diwali**, the year, and then your name, letter by letter. Add an emoji (🪔 ❤️ 🎉) and it gets its own little fireworks show in its own colours. When the show ends, the sky is yours: light any of 20 crackers whenever you like.
 
-It works on phones, tablets, computers and TVs, in English, Hindi and Bengali.
+It works on phones, tablets, computers and TVs, in English, Hindi and Bengali. The fireworks are worked out in the background, so even modest phones keep up and the buttons stay responsive during a busy show.
 
 ## What you can do
 

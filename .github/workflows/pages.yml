@@ -1,9 +1,9 @@
 # Publishes the site to GitHub Pages on every push to main.
 # One-time setup: repository Settings > Pages > Build and deployment > Source: "GitHub Actions".
 #
-# Before publishing it fingerprints every script and stylesheet (tools/stamp.mjs)
-# so visitors never get a mix of old and new files, and writes the absolute
-# preview-image URL that chat apps need.
+# Before publishing it fingerprints every script and stylesheet in the copied
+# site (tools/stamp.mjs) so visitors never get a mix of old and new files, and
+# writes the absolute preview-image URL that chat apps need.
 name: Deploy to GitHub Pages
 
 on:
@@ -34,14 +34,14 @@ jobs:
       - run: npm test
       - id: pages
         uses: actions/configure-pages@v5
-      - run: node tools/stamp.mjs --site "${{ steps.pages.outputs.base_url }}"
       - name: Collect the site
         run: |
           mkdir _site
           cp -r index.html sw.js manifest.webmanifest og-image.jpg .nojekyll css js icons _site/
+      - run: node tools/stamp.mjs --root _site --site "${{ steps.pages.outputs.base_url }}"
       # Smaller downloads: strip comments and whitespace, shorten local names.
-      # Each file is minified on its own (no bundling), so module paths and
-      # the fingerprinted import map stay exactly as stamped above.
+      # Each file is minified on its own (no bundling), so the fingerprinted
+      # import paths stay exactly as stamped above.
       - name: Minify scripts and styles
         working-directory: _site
         run: |

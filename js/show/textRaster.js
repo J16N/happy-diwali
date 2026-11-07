@@ -2,12 +2,15 @@
 // canvas, read the pixels back and keep one point per grid cell. Those points
 // are where firework stars will come to rest.
 
-import { font } from '../config.js';
+import { COLORS, font } from '../config.js';
 import { clamp, mixColor, rand } from '../utils.js';
+
+// On the page a hidden <canvas>; in the simulation worker an OffscreenCanvas.
+const newCanvas = () => (typeof document !== 'undefined' ? document.createElement('canvas') : new OffscreenCanvas(1, 1));
 
 let work = null;
 function workCanvas(w, h) {
-  if (!work) work = document.createElement('canvas');
+  if (!work) work = newCanvas();
   work.width = Math.max(1, Math.ceil(w));
   work.height = Math.max(1, Math.ceil(h));
   return work.getContext('2d', { willReadFrequently: true });
@@ -49,7 +52,7 @@ let measure = null;
 
 /** Ink bounds of `text` drawn at `px`, relative to (pen x, baseline). */
 function inkBounds(text, px) {
-  measure ??= document.createElement('canvas');
+  measure ??= newCanvas();
   const mctx = measure.getContext('2d', { willReadFrequently: true });
   mctx.font = font.text(px);
   const adv = mctx.measureText(text).width;
@@ -209,4 +212,19 @@ export function rasterEmoji(emoji, box, maxPoints = 1100) {
     size: clamp(st * (p.edge ? 0.95 : 0.85), 1.6, 9),
   }));
   return { points, step: st };
+}
+
+/**
+ * How many points a sample of Latin, Hindi and Bengali text and an emoji
+ * give here. The simulation worker compares its result with the page's to
+ * check that it can draw every script before taking over (fonts and colour
+ * emoji in OffscreenCanvas differ between browsers).
+ */
+export function probeRaster() {
+  const box = { x: 0, y: 0, w: 240, h: 120 };
+  const ramp = [COLORS.white, COLORS.gold];
+  return {
+    text: rasterLines([{ text: 'Aअঅ', ramp }], box, 4000).points.length,
+    emoji: rasterEmoji('🪔', box, 4000).points.length,
+  };
 }

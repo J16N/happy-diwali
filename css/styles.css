@@ -208,8 +208,9 @@ button:focus-visible, input:focus-visible {
 .mfield input:focus-visible { outline: none; }
 .mfield label {
   position: absolute;
+  --mf-rest: 28px; /* centre of the input; floating moves by transform only (GPU) */
   left: 12px;
-  top: 28px;
+  top: var(--mf-rest);
   max-width: calc(100% - 24px);
   padding: 0 4px;
   overflow: hidden;
@@ -222,12 +223,11 @@ button:focus-visible, input:focus-visible {
   transform: translateY(-50%);
   transform-origin: left center;
   pointer-events: none;
-  transition: top 0.16s ease, transform 0.16s ease, color 0.16s ease, background 0.16s ease;
+  transition: transform 0.16s ease, color 0.16s ease, background 0.16s ease;
 }
 .mfield input:focus + label,
 .mfield input:not(:placeholder-shown) + label {
-  top: 0;
-  transform: translateY(-50%) scale(0.78);
+  transform: translateY(calc(-1 * var(--mf-rest))) translateY(-50%) scale(0.78);
   background: var(--mf-bg);
 }
 .mfield input:focus + label { color: var(--gold); }
@@ -403,16 +403,16 @@ button:focus-visible, input:focus-visible {
 .vf-frame::after {
   content: "";
   position: absolute;
-  left: 8%;
-  right: 8%;
-  height: 2px;
-  top: 10%;
-  background: linear-gradient(90deg, transparent, var(--saffron), transparent);
-  box-shadow: 0 0 10px var(--saffron);
+  /* A full-height layer with the line painted near its top, slid by transform
+     so the animation runs on the compositor without repainting. */
+  inset: 0 8%;
+  background: linear-gradient(90deg, transparent, var(--saffron), transparent) 0 10% / 100% 2px no-repeat;
+  filter: drop-shadow(0 0 5px var(--saffron));
+  will-change: transform;
   animation: scanline 2.2s ease-in-out infinite alternate;
 }
 .viewfinder.off .vf-frame::after { display: none; }
-@keyframes scanline { to { top: 88%; } }
+@keyframes scanline { to { transform: translateY(78%); } }
 .scan-status { margin: 12px 0 0 !important; min-height: 1.4em; font-size: 0.9rem; }
 .scan-status:empty { display: none; }
 .scan-result p { margin: 12px 0 0 !important; font-size: 0.9rem; overflow-wrap: anywhere; color: var(--gold) !important; }
@@ -705,10 +705,8 @@ button:focus-visible, input:focus-visible {
   #share .share-result .qr { margin-top: 10px; }
   #share .mfield { margin-top: 10px; }
   #share .mfield input { height: 46px; padding: 0 14px !important; }
-  #share .mfield label { top: 23px; }
+  #share .mfield label { --mf-rest: 23px; }
   #share h2 { margin-bottom: 0; }
-  #share .mfield input:focus + label,
-  #share .mfield input:not(:placeholder-shown) + label { top: 0; }
   #share #msg-help { visibility: hidden; }
   #share .mfield-help { padding-top: 1px; line-height: 1.2; }
   #share .card h2 + p, #share .fineprint { display: none; }

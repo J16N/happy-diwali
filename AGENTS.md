@@ -19,18 +19,18 @@ npm test    # node tests/nameParser.test.mjs
 Deploy: push to `main`. GitHub repository **Settings > Pages > Source** must be **GitHub Actions**. `.github/workflows/pages.yml` then:
 
 1. runs the tests,
-2. `node tools/stamp.mjs --site <pages url>`: fingerprints files and writes absolute link-preview URLs,
-3. copies the site into `_site/`,
-4. minifies every script, `css/styles.css` and `sw.js` with esbuild **per file** (no bundling, so module paths and the stamped import map stay valid; `js/vendor/` is already minified),
+2. copies the site into `_site/`,
+3. `node tools/stamp.mjs --root _site --site <pages url>`: fingerprints the copy and writes absolute link-preview URLs,
+4. minifies every script, `css/styles.css` and `sw.js` with esbuild **per file** (no bundling, so the stamped import paths stay valid; `js/vendor/` is already minified),
 5. publishes.
 
-The committed `index.html` keeps an **empty** import map and no `modulepreload` links; only the workflow fills them in. `tools/stamp.mjs` is idempotent if run locally, but do not commit stamped output.
+`tools/stamp.mjs` rewrites files, so only ever run it on a copy (`--root`); the committed sources stay unstamped and `index.html` has no `modulepreload` links. To try a production build locally: copy the files as the workflow does, stamp the copy, then `node tools/serve.mjs 8081 <copy>`.
 
 ## Caching and offline
 
 GitHub Pages sends `Cache-Control: max-age=600` for every file. Two layers keep visitors on consistent, fresh files:
 
-- **Fingerprints** (`tools/stamp.mjs`): `?v=<content hash>` on `css/styles.css`, the entry `js/main.js`, and every other module through the import map; plus a `modulepreload` link per start-up module (placed *after* the import map, which browsers require). A file's URL changes exactly when its source changes.
+- **Fingerprints** (`tools/stamp.mjs`): `?v=<content hash>` on `css/styles.css`, the entry `js/main.js`, and every relative import inside the modules (static `from`, dynamic `import()`, and the worker's `new URL(…, import.meta.url)`). A module's hash covers its text *after* its own imports are rewritten, so it changes exactly when the module or anything it imports changes; this needs an acyclic import graph, which the script checks. Not an import map: browsers ignore import maps inside workers. Plus a `modulepreload` link per module, so the worker's modules are already downloaded when it starts.
 - **Service worker** (`sw.js`):
   - Fingerprinted URLs are immutable: served from the cache without a network request. When a new fingerprint of a path arrives, older ones are deleted.
   - Everything else (the page itself, unstamped files in development) is network-first, revalidated with `cache: 'no-cache'`, and falls back to the cache offline. Navigations fall back to the cached home page.
@@ -40,22 +40,25 @@ The service worker only registers on `https:` or `localhost`.
 ## Structure
 
 ```
-index.html              page, dialogs (welcome, gift, share, scan, install help), toolbar, ⋯ menu, import map
+index.html              page, dialogs (welcome, gift, share, scan, install help), toolbar, ⋯ menu
 manifest.webmanifest    install-as-an-app: name, icons, shortcuts (?action=send / ?action=scan)
 icons/                  app icons: any (rounded, transparent corners), maskable, apple-touch (palette PNGs)
 sw.js                   service worker (see above)
 og-image.jpg            1200x630 link preview, a frame of the show without the year
-tools/stamp.mjs         deploy fingerprinting + modulepreload + absolute og:image / og:url
+tools/stamp.mjs         deploy fingerprinting + modulepreload + absolute og:image / og:url (run on a copy: --root)
 tools/serve.mjs         no-cache dev server
 .github/workflows/      GitHub Pages deploy
 css/styles.css          all styling: dialogs, Material-style outlined fields, wheel, menu, scanner, responsive rules
 js/
-  main.js               boot, renderer choice, names/links/language state, input (tap / hold / wheel / keys),
+  main.js               boot, renderer and simulation choice, names/links/language state, input (tap / hold / wheel / keys),
                         recording, scanner, install, render loop, adaptive quality
   config.js             colours, budgets, limits, timings, physics constants, GREETINGS, fonts, localDigits
   utils.js              random, easing, colour, Fibonacci sphere
   engine/
     view.js             2.5D camera: projection, floor geometry, parallax, shake
+    sim.js              the whole simulation behind one interface: world, director, diyas, bulbs, clouds; step(dt) -> Frame
+    sim.worker.js       runs Sim in a Web Worker (the default)
+    simClient.js        createSim(): worker if possible, else Sim on the page; same interface either way
     world.js            owns all live objects, wind, sound placement, flashes/lights, frame collection
     particles.js        typed-array spark pool
     textStars.js        physics-guided stars that spell text and emoji
@@ -106,6 +109,19 @@ World units are CSS pixels on the focal plane `z = 0`; larger `z` is further awa
 
 Lines are laid out from **measured ink bounds** (each line is drawn on a padded canvas and scanned), never from `measureText` widths or fixed line heights. Hindi and Bengali need this: pre-base vowel signs (ি, ि), signs above and below the line, and synthesised bold all extend past the advance box. Emoji are drawn at 150 px on a padded canvas and cropped to their real pixels for the same reason. Emoji scenes burst all slices together so a picture never appears half-formed.
 
+### Simulation thread
+
+Everything that moves runs in a Web Worker (`sim.worker.js`), so a busy show never holds up input, the UI or sound on the page; the page only draws. `simClient.js` gives `main.js` the same interface whether the simulation is in the worker or on the page:
+
+- **Frames** are the `Frame` batches, transferred without copying. The page hands each buffer back with a later step for reuse, so nothing is allocated per frame once warm.
+- **Pacing.** A step covers the real time since the previous one (capped at 50 ms). Fast steps are paced by `requestAnimationFrame`. When a step takes more than ~0.6 of a display frame (a slow phone), the next one starts as soon as a frame arrives, so the worker never waits for a refresh. Nothing runs while frames are not being shown (a hidden tab).
+- **Sound and accessibility.** The worker records its `sound.*` calls and sends them with the frame; the page plays them. Director hooks (`announce`, `done`) arrive as messages.
+- **Camera.** The page keeps its own `View` (same `resize`), for taps, layout and `centralBox`; parallax and shake offsets arrive with each frame for the backdrop layers.
+- **Text** is rasterised in the worker on an `OffscreenCanvas`. Before taking over, the worker draws a Latin + Hindi + Bengali sample and an emoji, and the page compares the point counts with its own (`probeRaster`). If they fall short, or module workers / `OffscreenCanvas` are missing, the simulation stays on the page (`LocalSim`). `?worker=0` forces that, for comparisons.
+- **Testing on a slow CPU.** DevTools CPU throttling slows only the page's main thread, not workers, so it overstates the worker's advantage. To compare fairly, temporarily busy-wait in the worker's step handler for 19 times the step's own duration (≈ 20x).
+
+Measured with 20x throttling, a name forming plus shells (614x717, WebGL): on the page, 56 new frames/s with ~15 ms of main-thread work per frame and the page itself at 56 fps; in the (equally slowed) worker, 64 new frames/s with ~0.1 ms of main-thread work and the page at 115 fps.
+
 ### Rendering
 
 Both renderers consume the same `Frame` (glow capsules, smoke puffs, sprites, clouds, lights).
@@ -121,7 +137,7 @@ Sparks are capsules: an anti-aliased white-hot core plus a coloured halo, so sma
 
 Canvas 2D (`render/canvas.js`) is the fallback (`?renderer=2d` forces it): same draw order with cached glow sprites, no bloom, unlit clouds.
 
-Adaptive quality (`main.js`): levels 0 to 2 lower particle density, pixel ratio and bloom when the average frame time stays above ~27 ms. Frames slower than 80 ms are ignored as one-off stalls. Touch devices start at level 1.
+Adaptive quality (`main.js`): levels 0 to 2 lower particle density, pixel ratio and bloom when the average time between *new* frames stays above ~27 ms (so a slow worker counts too). It is checked before drawing, because a new level clears the canvas. Frames slower than 80 ms are ignored as one-off stalls. Touch devices start at level 1.
 
 ### Sound (`audio/sound.js`)
 
@@ -131,7 +147,7 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 
 ### Names, links and storage
 
-- URL parameters: `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default), `renderer=2d`, `action=send|scan` (app shortcuts).
+- URL parameters: `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default), `renderer=2d`, `worker=0` (simulation on the page), `action=send|scan` (app shortcuts).
 - Names from a link are never stored. localStorage keys (`STORAGE_KEYS`): `diwali.name` (the visitor's own name), `diwali.lang`, `diwali.muted`, `diwali.cracker`.
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.
 - Limits (`LIMITS`): own name 40, share To/From 30 (silent), wish 50 (with counter), 4 words per scene, 10 emoji scenes. Wishes always wrap into at most 4 sky lines.
@@ -164,4 +180,5 @@ Add an entry (id, label, hint, SVG icon) to `GROUND` or `SKY` in `ui/crackers.js
   - a `?to=` link shows the gift card;
   - no console errors.
 - Check 320/360 px portrait, 740×360 landscape and desktop; dialogs fit or scroll, with no horizontal scroll.
-- `?renderer=2d` still renders.
+- `?renderer=2d` still renders, and `?worker=0` (simulation on the page) still plays the show.
+- After changing imports or the build: stamp a copy, serve it, and check the page reports `data-sim="worker"` with no console errors.
