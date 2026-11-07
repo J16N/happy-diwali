@@ -160,12 +160,28 @@ export class UI {
 
     const full = this.el.full;
     const canFull = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+    this.canFull = !!canFull;
     if (canFull) {
       full.addEventListener('click', () => this.h.fullscreen());
-      const sync = () => this.setFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
+      // The app already filling the screen (installed on Android, or the
+      // browser's own full screen such as F11) makes the button pointless,
+      // so it hides; it comes back as soon as there is something to gain.
+      const shown = matchMedia('(display-mode: fullscreen)');
+      const sync = () => {
+        const ours = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        this.setFullscreen(ours);
+        full.hidden = shown.matches && !ours; // when we went full screen ourselves, keep "exit"
+      };
       document.addEventListener('fullscreenchange', sync);
       document.addEventListener('webkitfullscreenchange', sync);
+      shown.addEventListener?.('change', sync);
+      sync();
     } else full.hidden = true; // iPhone Safari has no page fullscreen
+  }
+
+  /** Whether the full screen button (and the F key) does anything right now. */
+  get fullscreenUseful() {
+    return this.canFull && !this.el.full.hidden;
   }
 
   /** A tap outside a dialog's card closes it, and does nothing else (no rocket). */

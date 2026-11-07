@@ -578,7 +578,7 @@ addEventListener('keydown', (e) => {
   if (ui.modalOpen) return;
   if (e.key === 'm' || e.key === 'M') ui.h.toggleSound();
   else if (e.key === 'r' || e.key === 'R') startShow();
-  else if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  else if ((e.key === 'f' || e.key === 'F') && ui.fullscreenUseful) toggleFullscreen();
   else if ((e.key === 'v' || e.key === 'V') && canRecord()) toggleRecord();
   else if (e.key === 'c' || e.key === 'C') openScanner();
   else if ((e.key === 'q' || e.key === 'Q') && !press) {

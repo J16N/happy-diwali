@@ -136,6 +136,10 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.
 - Limits (`LIMITS`): own name 40, share To/From 30 (silent), wish 50 (with counter), 4 words per scene, 10 emoji scenes. Wishes always wrap into at most 4 sky lines.
 
+### Full screen
+
+The ⛶ button (and `F`) is hidden while the display is already fullscreen (`display-mode: fullscreen`: the installed app on Android, or the browser's own full screen such as F11), unless the page entered fullscreen itself, in which case it stays as "Exit full screen". It is also hidden where page fullscreen is unsupported (iPhone). Desktop installed apps open in a window, so the button stays there.
+
 ### Languages
 
 `GREETINGS` in `config.js` holds per-language sky text (`wide` / `tall` forms), the sign-off (`from`), card title, the festival `word` used in "Send a … greeting", and `digits` for the year (`localDigits`). Adding a language means: a `GREETINGS` entry, fonts in `font.text`, a button in both `.lang` toggles in `index.html`, and a test.

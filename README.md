@@ -38,6 +38,8 @@ The fireworks follow real physics: shells bloom, hang and droop in the breeze, s
 | Full screen | ⛶ button | ⛶ button or `F` |
 | Change name, save a video, scan a QR code, install | ⋯ menu | ⋯ menu (`V` video, `C` scan) |
 
+The full screen button only appears when it can help: the installed app on Android phones already opens full screen, so it is hidden there.
+
 Sound is on from the start; you can mute it any time. People who prefer reduced motion get softer flashes and a steadier view.
 
 ## Your privacy
