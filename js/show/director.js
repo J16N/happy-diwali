@@ -8,7 +8,7 @@ import { COLORS, GREETINGS, LINE_RAMPS, PALETTE, TIMING, localDigits } from '../
 import { burst, subBurst, RANDOM_BURSTS } from '../crackers/shells.js';
 import { Anar, Chakra, Sparkler, Ladi, Bomb, Sutli, RomanCandle } from '../crackers/ground.js';
 import { SkyLantern } from '../crackers/lantern.js';
-import { messageLines, parseName, tokenize } from './nameParser.js';
+import { parseMessage, parseName, tokenize } from './nameParser.js';
 import { centralBox, rasterLines, rasterEmoji } from './textRaster.js';
 import { clamp, lerp, pick, rand } from '../utils.js';
 
@@ -80,8 +80,8 @@ export class Director {
     this.opts = opts;
     this.lang = GREETINGS[opts.lang] ? opts.lang : 'en';
     this.plan = [{ type: 'greeting' }, ...parseName(name).scenes];
-    const msg = messageLines(opts.message ?? '', { width: this.world.W / this.world.view.skyH < 1.05 ? 11 : 18 });
-    if (msg.length) this.plan.push({ type: 'message', lines: msg });
+    // The wish follows the name: its words as lines, each emoji its own firework.
+    this.plan.push(...parseMessage(opts.message ?? '', { width: this.world.W / this.world.view.skyH < 1.05 ? 11 : 18 }));
     const signature = tokenize(opts.sender ?? '').filter((t) => t.type === 'word').map((t) => t.value).slice(0, 3);
     if (signature.length) this.plan.push({ type: 'from', lines: signature });
     this.sceneIndex = from;

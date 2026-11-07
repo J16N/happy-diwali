@@ -1,6 +1,6 @@
 // Run with: node tests/nameParser.test.mjs
 import assert from 'node:assert/strict';
-import { parseName, tokenize, sanitize, isEmoji, messageLines } from '../js/show/nameParser.js';
+import { parseName, parseMessage, tokenize, sanitize, isEmoji, messageLines } from '../js/show/nameParser.js';
 import { localDigits } from '../js/config.js';
 
 let passed = 0;
@@ -101,12 +101,26 @@ test('Indic joiners inside words survive', () => {
   assert.deepEqual(parseName(kshatriya).scenes, [{ type: 'words', lines: [kshatriya] }]);
 });
 
-test('messages wrap into short sky lines, emoji only on the card', () => {
+test('message words wrap into short sky lines', () => {
   assert.deepEqual(messageLines('May this Diwali bring you joy, light and laughter 🪔✨'), [
     'May this Diwali', 'bring you joy,', 'light and', 'laughter',
   ]);
   assert.deepEqual(messageLines('🪔🎉'), []);
   assert.ok(messageLines('word '.repeat(60)).length <= 4);
+});
+
+test('a wish plays like a name: word lines, then one firework per emoji, in order', () => {
+  assert.deepEqual(parseMessage('Happy Diwali 🪔 stay blessed ✨🎉'), [
+    { type: 'message', lines: ['Happy Diwali'] },
+    { type: 'emoji', value: '🪔' },
+    { type: 'message', lines: ['stay blessed'] },
+    { type: 'emoji', value: '✨' },
+    { type: 'emoji', value: '🎉' },
+  ]);
+  assert.deepEqual(parseMessage('🪔❤️'), [{ type: 'emoji', value: '🪔' }, { type: 'emoji', value: '❤️' }]);
+  assert.deepEqual(parseMessage('👨‍👩‍👧 🇮🇳'), [{ type: 'emoji', value: '👨‍👩‍👧' }, { type: 'emoji', value: '🇮🇳' }]);
+  assert.deepEqual(parseMessage(''), []);
+  assert.equal(parseMessage('🎆'.repeat(30)).length, 10); // capped like a name's emoji
 });
 
 test('a full 50-character wish always fits in four sky lines, even on a narrow phone', () => {

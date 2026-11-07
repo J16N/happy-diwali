@@ -121,13 +121,9 @@ export function parseName(input, { linesPerPage = LIMITS.linesPerPage, emojiScen
   return { name, scenes };
 }
 
-/**
- * A personal message -> up to `maxLines` short lines of words for the sky
- * (emoji are left out: they only show on the greeting card).
- */
-export function messageLines(input, { width = 16, maxLines = 4 } = {}) {
-  const words = tokenize(sanitize(input, LIMITS.messageGraphemes)).filter((t) => t.type === 'word').map((t) => t.value);
-  // Widen the lines when needed so the whole wish fits in maxLines.
+/** Words -> up to `maxLines` lines of about `width` characters, never splitting a word. */
+function wrapWords(words, { width, maxLines }) {
+  // Widen the lines when needed so all the words fit in maxLines.
   const total = graphemes(words.join(' ')).length;
   width = Math.max(width, Math.ceil(total / maxLines) + 2);
   const lines = [];
@@ -141,4 +137,39 @@ export function messageLines(input, { width = 16, maxLines = 4 } = {}) {
   }
   if (line) lines.push(line);
   return lines.slice(0, maxLines);
+}
+
+/** The words of a personal message (emoji left out) -> up to `maxLines` short lines for the sky. */
+export function messageLines(input, { width = 16, maxLines = 4 } = {}) {
+  const words = tokenize(sanitize(input, LIMITS.messageGraphemes)).filter((t) => t.type === 'word').map((t) => t.value);
+  return wrapWords(words, { width, maxLines });
+}
+
+/**
+ * A personal message -> show scenes in reading order, like a name: each run
+ * of words is one scene of short lines, each emoji its own firework.
+ *
+ *   "Happy Diwali 🪔 stay blessed ✨"
+ *     -> [ message: Happy Diwali ], [ emoji: 🪔 ], [ message: stay blessed ], [ emoji: ✨ ]
+ */
+export function parseMessage(input, { width = 16, maxLines = 4, emojiScenes = LIMITS.emojiScenes } = {}) {
+  const scenes = [];
+  let words = [];
+  let emojis = 0;
+  const flush = () => {
+    if (words.length) scenes.push({ type: 'message', lines: wrapWords(words, { width, maxLines }) });
+    words = [];
+  };
+  for (const t of tokenize(sanitize(input, LIMITS.messageGraphemes))) {
+    if (t.type === 'word') words.push(t.value);
+    else {
+      flush();
+      if (emojis < emojiScenes) {
+        scenes.push({ type: 'emoji', value: t.value });
+        emojis++;
+      }
+    }
+  }
+  flush();
+  return scenes;
 }
