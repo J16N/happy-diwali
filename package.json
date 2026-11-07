@@ -1,0 +1,12 @@
+{
+  "name": "diwali-greeting",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A Diwali greeting written in fireworks. Static site, no build step.",
+  "scripts": {
+    "start": "node tools/serve.mjs 8080",
+    "stamp": "node tools/stamp.mjs",
+    "test": "node tests/nameParser.test.mjs"
+  }
+}

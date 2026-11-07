@@ -1,0 +1,53 @@
+# Publishes the site to GitHub Pages on every push to main.
+# One-time setup: repository Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#
+# Before publishing it fingerprints every script and stylesheet (tools/stamp.mjs)
+# so visitors never get a mix of old and new files, and writes the absolute
+# preview-image URL that chat apps need.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - id: pages
+        uses: actions/configure-pages@v5
+      - run: node tools/stamp.mjs --site "${{ steps.pages.outputs.base_url }}"
+      - name: Collect the site
+        run: |
+          mkdir _site
+          cp -r index.html sw.js manifest.webmanifest og-image.jpg .nojekyll css js icons _site/
+      # Smaller downloads: strip comments and whitespace, shorten local names.
+      # Each file is minified on its own (no bundling), so module paths and
+      # the fingerprinted import map stay exactly as stamped above.
+      - name: Minify scripts and styles
+        working-directory: _site
+        run: |
+          npx --yes esbuild@0.24.0 $(find js -name '*.js' ! -path 'js/vendor/*') --minify --outdir=js --outbase=js --allow-overwrite --log-level=warning
+          npx --yes esbuild@0.24.0 css/styles.css --minify --outfile=css/styles.css --allow-overwrite --log-level=warning
+          npx --yes esbuild@0.24.0 sw.js --minify --outfile=sw.js --allow-overwrite --log-level=warning
+      - uses: actions/upload-pages-artifact@v3
+      - id: deployment
+        uses: actions/deploy-pages@v4

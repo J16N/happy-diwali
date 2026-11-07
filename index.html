@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
+  <meta name="theme-color" content="#04020c">
+  <title>Happy Diwali</title>
+  <meta name="description" content="A Diwali greeting written across the night sky in fireworks. Enter your name and watch it light up.">
+  <meta property="og:title" content="Happy Diwali">
+  <meta property="og:description" content="Your name, written in fireworks. Happy Diwali!">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Happy Diwali written in fireworks over a city skyline, seen from a terrace lit with diyas">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="og-image.jpg">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M8 34h48c0 14-10 22-24 22S8 48 8 34z' fill='%23d9843a'/%3E%3Cpath d='M32 8c6 8 8 14 0 24-8-10-6-16 0-24z' fill='%23ffc94d'/%3E%3C/svg%3E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Diwali">
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Filled in by tools/stamp.mjs: fingerprinted module URLs so a deploy never mixes old and new files. -->
+  <script type="importmap">
+  {"imports": {}}
+  </script>
+</head>
+<body>
+  <canvas id="scene" aria-hidden="true"></canvas>
+
+  <p id="live" class="sr-only" role="status" aria-live="polite"></p>
+
+  <nav id="toolbar" class="toolbar" aria-label="Show controls" hidden>
+    <button id="btn-sound" type="button" aria-label="Mute sound" aria-pressed="false" title="Sound (M)">
+      <svg class="on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12"/></svg>
+      <svg class="off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+    </button>
+    <button id="btn-replay" type="button" aria-label="Replay the show" title="Replay (R)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5"/></svg>
+    </button>
+    <button id="btn-share" type="button" aria-label="Send a greeting to someone" title="Send a greeting">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>
+    </button>
+    <button id="btn-full" type="button" aria-label="Enter full screen" aria-pressed="false" title="Full screen (F)">
+      <svg class="enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      <svg class="exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+    </button>
+    <button id="btn-more" type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" title="More">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    </button>
+  </nav>
+
+  <div id="menu" class="menu" role="menu" aria-label="More options" hidden>
+    <button id="btn-name" type="button" role="menuitem">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+      <span>Change name</span>
+    </button>
+    <button id="btn-rec" type="button" role="menuitem" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3"/></svg>
+      <span id="rec-label">Save a video</span><kbd>V</kbd>
+    </button>
+    <button id="btn-scan" type="button" role="menuitem">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 011-1h3M16 4h3a1 1 0 011 1v3M20 16v3a1 1 0 01-1 1h-3M8 20H5a1 1 0 01-1-1v-3"/><path d="M8 12h8"/></svg>
+      <span>Scan a QR code</span><kbd>C</kbd>
+    </button>
+    <button id="btn-install" type="button" role="menuitem" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19h14"/></svg>
+      <span>Install as an app</span>
+    </button>
+  </div>
+
+  <section id="welcome" class="welcome" role="dialog" aria-modal="true" aria-labelledby="welcome-title" hidden>
+    <form id="welcome-form" class="card" autocomplete="off">
+      <div class="lang seg" role="group" aria-label="Greeting language" data-group="welcome">
+        <button type="button" data-lang="en" aria-pressed="true" aria-label="English" title="English: Happy Diwali">A</button>
+        <button type="button" data-lang="hi" lang="hi" aria-pressed="false" aria-label="Hindi" title="हिन्दी: शुभ दीपावली">अ</button>
+        <button type="button" data-lang="bn" lang="bn" aria-pressed="false" aria-label="Bengali" title="বাংলা: শুভ দীপাবলি">অ</button>
+      </div>
+      <h1 id="welcome-title">Happy Diwali</h1>
+      <p id="welcome-text"></p>
+      <label class="sr-only" for="name-input">Your name</label>
+      <input id="name-input" name="name" type="text" maxlength="120" placeholder="Your name" enterkeyhint="go"
+             autocapitalize="words" spellcheck="false">
+      <div class="actions">
+        <button id="btn-start" class="primary" type="submit">Light it up</button>
+        <button id="btn-skip" class="ghost" type="button">Skip</button>
+      </div>
+      <p class="fineprint">Add emojis if you like. Each one gets its own mini fireworks show.<br>Tap the sky to launch, press and hold for more crackers. Sound is on, mute anytime.</p>
+    </form>
+  </section>
+
+  <section id="gift" class="welcome" role="dialog" aria-modal="true" aria-labelledby="gift-title" hidden>
+    <div class="card">
+      <p class="eyebrow">A Diwali greeting for you</p>
+      <h1 id="gift-title">Happy Diwali</h1>
+      <p id="gift-text"></p>
+      <blockquote id="gift-msg" class="gift-msg" hidden></blockquote>
+      <div class="actions">
+        <button id="btn-open" class="primary" type="button">Open your greeting</button>
+      </div>
+      <button id="btn-own" class="link" type="button">Make your own greeting instead</button>
+    </div>
+  </section>
+
+  <section id="share" class="welcome" role="dialog" aria-modal="true" aria-labelledby="share-title" hidden>
+    <form id="share-form" class="card" autocomplete="off">
+      <div class="lang seg" role="group" aria-label="Greeting language" data-group="share">
+        <button type="button" data-lang="en" aria-pressed="true" aria-label="English" title="English: Happy Diwali">A</button>
+        <button type="button" data-lang="hi" lang="hi" aria-pressed="false" aria-label="Hindi" title="हिन्दी: शुभ दीपावली">अ</button>
+        <button type="button" data-lang="bn" lang="bn" aria-pressed="false" aria-label="Bengali" title="বাংলা: শুভ দীপাবলি">অ</button>
+      </div>
+      <button id="btn-share-close" class="card-close" type="button" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2 id="share-title">Send a <span id="share-word">Diwali</span> greeting</h2>
+      <p>Their name will be written across the sky when they open your link.</p>
+      <div class="mfield">
+        <input id="share-to" type="text" maxlength="120" placeholder=" " enterkeyhint="next" autocapitalize="words" spellcheck="false">
+        <label for="share-to">To</label>
+      </div>
+      <div class="mfield">
+        <input id="share-from" type="text" maxlength="120" placeholder=" " enterkeyhint="next" autocapitalize="words" spellcheck="false">
+        <label for="share-from">From (optional)</label>
+      </div>
+      <div class="mfield">
+        <input id="share-msg" type="text" maxlength="200" placeholder=" " enterkeyhint="go" autocapitalize="sentences" aria-describedby="msg-help msg-count">
+        <label for="share-msg">Wish (optional)</label>
+        <div class="mfield-help">
+          <span id="msg-help">Written in the sky after their name</span>
+          <span id="msg-count" class="count" aria-live="polite">0/50</span>
+        </div>
+      </div>
+      <div id="share-result" class="share-result" hidden>
+        <div class="share-row">
+          <input id="share-link" type="text" readonly aria-label="Greeting link">
+          <button id="btn-copy" class="ghost" type="button">Copy</button>
+        </div>
+        <p id="share-status" class="share-status" role="status"></p>
+        <figure class="qr">
+          <div id="share-qr" class="qr-code" role="img" aria-label="QR code for the greeting link"></div>
+          <figcaption>Scan to open on another phone or a TV</figcaption>
+        </figure>
+      </div>
+      <div class="actions">
+        <button id="btn-send" class="primary" type="submit">Share link</button>
+      </div>
+      <p class="fineprint">Leave "To" empty to send a link that asks them for their name.</p>
+    </form>
+  </section>
+
+  <section id="scan" class="welcome" role="dialog" aria-modal="true" aria-labelledby="scan-title" hidden>
+    <div class="card scan-card">
+      <button id="btn-scan-close" class="card-close" type="button" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2 id="scan-title">Scan a greeting</h2>
+      <p id="scan-help">Point your camera at a greeting's QR code.</p>
+      <div class="viewfinder">
+        <video id="scan-video" playsinline muted aria-label="Camera preview"></video>
+        <div class="vf-frame" aria-hidden="true"></div>
+      </div>
+      <p id="scan-status" class="scan-status" role="status"></p>
+      <div id="scan-result" class="scan-result" hidden>
+        <p id="scan-text"></p>
+        <div class="actions"><button id="btn-scan-open" class="primary" type="button">Open greeting</button></div>
+      </div>
+      <label class="ghost file-btn">
+        <input id="scan-file" type="file" accept="image/*">
+        <span>Choose a photo instead</span>
+      </label>
+    </div>
+  </section>
+
+  <section id="install-help" class="welcome" role="dialog" aria-modal="true" aria-labelledby="install-title" hidden>
+    <div class="card">
+      <button id="btn-install-close" class="card-close" type="button" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <h2 id="install-title">Install the app</h2>
+      <ol class="steps">
+        <li>Tap the <strong>Share</strong> button <svg class="inline-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 00-1 1v8a1 1 0 001 1h14a1 1 0 001-1v-8a1 1 0 00-1-1h-1"/></svg> in Safari's toolbar.</li>
+        <li>Choose <strong>Add to Home Screen</strong>.</li>
+        <li>Tap <strong>Add</strong>. Diwali opens full screen from your home screen, even offline.</li>
+      </ol>
+    </div>
+  </section>
+
+  <p id="hint" class="hint" hidden><span>Tap to launch a rocket</span><span class="dot" aria-hidden="true">·</span><span>Press and hold for more crackers</span></p>
+
+  <div id="charge" class="charge" aria-hidden="true" hidden>
+    <svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="26"/><circle class="fill" cx="32" cy="32" r="26"/></svg>
+  </div>
+  <div id="wheel" class="wheel" role="dialog" aria-label="Choose a cracker" hidden></div>
+  <button id="rec" class="rec" type="button" aria-label="Stop recording and save the video" title="Stop and save (V)" hidden><span class="rec-dot" aria-hidden="true"></span><span id="rec-time">REC 0:00</span><span class="rec-stop" aria-hidden="true"></span></button>
+  <div id="toast" class="toast" role="status"></div>
+
+  <noscript><p class="noscript">Happy Diwali! This greeting needs JavaScript to light up the sky.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
