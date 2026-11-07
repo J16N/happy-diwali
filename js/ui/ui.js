@@ -288,12 +288,15 @@ export class UI {
     text.lang = g;
   }
 
-  showWelcome({ name = '', lang = 'en' } = {}) {
+  /** invite: an open greeting ({ from, message }) that asks the visitor for their name. */
+  showWelcome({ name = '', lang = 'en', invite = null } = {}) {
     this.setLang('welcome', lang);
     this.el.gift.hidden = true;
-    this.el.text.textContent = name
-      ? `Welcome back, ${name}! Ready for your show?`
-      : 'Tell us your name and we will write it across the sky in fireworks.';
+    this.el.text.textContent = invite
+      ? `${invite.from || 'Someone'} sent you a Diwali greeting. ${name ? 'Check your name and start the show' : 'Type your name'} to see it in fireworks.`
+      : name
+        ? `Welcome back, ${name}! Ready for your show?`
+        : 'Tell us your name and we will write it across the sky in fireworks.';
     this.el.input.value = name;
     this.el.start.textContent = name ? 'Start the show' : 'Light it up';
     this.el.toolbar.hidden = true;

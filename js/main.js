@@ -83,6 +83,9 @@ document.documentElement.dataset.sim = sim.mode;
 //   link  ?to=Priya&from=Jishan&msg=...&lang=hi: a greeting someone made
 //         for this visitor. It is never stored, so opening a friend's link
 //         does not overwrite your own name. (?name= is the older form of ?to=.)
+//         Without ?to= but with ?from= or ?msg= it is an open greeting: the
+//         visitor types their own name, and the show still carries the
+//         sender's wish and signature.
 const okLang = (l) => (GREETINGS[l] ? l : '');
 let me = sanitize(store.get(STORAGE_KEYS.name) ?? '');
 let myLang = okLang(store.get(STORAGE_KEYS.lang)) || 'en';
@@ -92,10 +95,13 @@ const link = {
   message: sanitize(params.get('msg') ?? '', LIMITS.messageGraphemes),
   lang: okLang(params.get('lang')),
 };
+/** An open greeting: from someone, for whoever opens it (asks for their name). */
+const isOpenGreeting = () => !link.to && !!(link.from || link.message);
+const fromLink = !!link.to || isOpenGreeting();
 let name = link.to || me; // the name written in the sky
-let from = link.to ? link.from : ''; // signed at the end of the show
-let message = link.to ? link.message : '';
-let lang = (link.to && link.lang) || myLang;
+let from = fromLink ? link.from : ''; // signed at the end of the show
+let message = fromLink ? link.message : '';
+let lang = (fromLink && link.lang) || myLang;
 
 /** Drop the link's names from the address bar (the visitor is making their own). */
 function leaveLink() {
@@ -185,6 +191,14 @@ function greetingUrl({ to, from: sender, message: msg, lang: l }) {
   if (msg) url.searchParams.set('msg', msg);
   if (l && l !== 'en') url.searchParams.set('lang', l);
   return url.toString();
+}
+
+/** Starting from the welcome dialog: an open greeting keeps its wish and sender; anything else is the visitor's own show. */
+function keepOpenGreeting(l) {
+  if (!isOpenGreeting()) return leaveLink();
+  from = link.from;
+  message = link.message;
+  lang = okLang(l) || link.lang || myLang;
 }
 
 function rememberLang(l) {
@@ -290,13 +304,13 @@ const ui = new UI({
     me = sanitize(raw);
     if (me) store.set(STORAGE_KEYS.name, me);
     else store.remove(STORAGE_KEYS.name);
-    leaveLink();
+    keepOpenGreeting(l);
     name = me;
     startShow();
   },
   skip(l) {
     rememberLang(l);
-    leaveLink();
+    keepOpenGreeting(l);
     name = '';
     startShow();
   },
@@ -310,7 +324,8 @@ const ui = new UI({
   changeName() {
     sim.stop();
     cancelPress();
-    ui.showWelcome({ name: link.to ? me : name, lang: myLang });
+    if (isOpenGreeting()) ui.showWelcome({ name: me, lang, invite: link });
+    else ui.showWelcome({ name: link.to ? me : name, lang: myLang });
   },
   toggleSound() {
     const muted = !sound.muted;
@@ -640,6 +655,7 @@ size = layout();
 ui.setMuted(sound.muted);
 sim.igniteDiyas(); // light the diyas behind the welcome card
 if (link.to) ui.showGift(link, GREETINGS[lang].card);
+else if (isOpenGreeting()) ui.showWelcome({ name: me, lang, invite: link });
 else ui.showWelcome({ name: me, lang: myLang });
 
 // Home-screen shortcuts (long-press the app icon): ?action=send / ?action=scan.

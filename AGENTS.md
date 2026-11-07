@@ -148,6 +148,7 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 ### Names, links and storage
 
 - URL parameters: `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default), `renderer=2d`, `worker=0` (simulation on the page), `action=send|scan` (app shortcuts).
+- A link without `to` but with `from` or `msg` is an open greeting: the welcome dialog says who sent it and asks the visitor's name; the show then plays that name, the wish and the sender's sign-off (in the link's language unless the visitor picks another).
 - Names from a link are never stored. localStorage keys (`STORAGE_KEYS`): `diwali.name` (the visitor's own name), `diwali.lang`, `diwali.muted`, `diwali.cracker`.
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.
 - Limits (`LIMITS`): own name 40, share To/From 30 (silent), wish 50 (with counter), 4 words per scene, 10 emoji scenes. A wish plays like a name (`parseMessage`): each run of words wraps into at most 4 sky lines, and each emoji gets its own firework, in reading order (up to 10).
