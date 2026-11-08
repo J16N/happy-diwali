@@ -44,10 +44,16 @@ export const isEmoji = (g) => EMOJI.test(g) && !TEXT_SYMBOLS.test(g);
 // Characters that have no visible form of their own but show up in pasted
 // text. Drawn on a canvas, some of them come out as boxes, e.g. U+FFFC, the
 // "OBJ" placeholder macOS / iOS leave behind for a Genmoji, sticker or
-// attachment. Stripped from words. ZWJ / ZWNJ are kept inside words because
-// Indic scripts use them to shape conjuncts.
-const INVISIBLE = /[\uFFFC\uFFFD\u00AD\u180E\u200B\u2060-\u2064\uFEFF\uFE00-\uFE0F\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}\p{Co}\p{Cn}]/gu;
-const EDGE_JOINERS = /^[\u200C\u200D]+|[\u200C\u200D]+$/gu;
+// attachment. Others are blanks people paste to make a name look empty:
+// Hangul fillers (U+3164, U+115F, U+1160, U+FFA0) and the Braille blank
+// (U+2800). Also the combining grapheme joiner, the Arabic letter mark and
+// Khmer's invisible vowels. Stripped from words. ZWJ / ZWNJ are kept inside
+// words because Indic scripts use them to shape conjuncts.
+const INVISIBLE =
+  /[\uFFFC\uFFFD\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B\u2060-\u2064\u2800\u3164\uFEFF\uFFA0\uFE00-\uFE0F\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}\p{Co}\p{Cn}]/gu;
+// Joiners at either end of a word, and combining marks at its start (an
+// accent or vowel sign with no letter to sit on draws as a dotted circle).
+const EDGE_JOINERS = /^[\u200C\u200D\p{M}]+|[\u200C\u200D]+$/gu;
 
 /** A grapheme cleaned for display: emoji stay whole, text loses invisible characters. */
 function visible(g) {

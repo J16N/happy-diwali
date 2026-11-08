@@ -143,6 +143,17 @@ test('the year is written in each language\'s own numerals', () => {
   assert.equal(localDigits(2031, 'xx'), '2031'); // unknown language: plain digits
 });
 
+test('blank-looking characters are stripped from the ends of every field', () => {
+  const blanks = [' \t\n', ' 　 ', '​﻿⁠', '‎‮‬', '؜', '‍‌', '­͏', 'ㅤᅟᅠﾠ', '⠀', '឴឵', '᠎', '️'];
+  for (const b of blanks) {
+    assert.equal(sanitize(`${b}Asha${b}`), 'Asha', JSON.stringify(b));
+    assert.equal(sanitize(`${b}नीता ${b} রায়${b}`), 'नीता রায়', JSON.stringify(b));
+  }
+  assert.equal(sanitize('ㅤ⠀​ㅤ'), ''); // only fillers: no name at all
+  assert.equal(sanitize('́Asha िनीता'), 'Asha नीता'); // marks with no letter to sit on
+  assert.equal(sanitize('किशोर क्‍ष ❤️ 1️⃣'), 'किशोर क्‍ष ❤️ 1️⃣'); // marks and joiners inside words stay
+});
+
 test('greeting links round-trip in every script, with emoji', () => {
   const cases = [
     { to: 'Lakshmi Narayan', from: 'Jishan', message: 'Wishing you a very happy Diwali 🪔✨', lang: 'en' },
