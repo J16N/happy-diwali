@@ -33,6 +33,7 @@ export class UI {
       shareQr: $('share-qr'),
       shareStatus: $('share-status'),
       giftMsg: $('gift-msg'),
+      welcomeMsg: $('welcome-msg'),
       rec: $('btn-rec'),
       recBadge: $('rec'),
       recTime: $('rec-time'),
@@ -288,9 +289,17 @@ export class UI {
     text.lang = g;
   }
 
-  /** invite: an open greeting ({ from, message }) that asks the visitor for their name. */
-  showWelcome({ name = '', lang = 'en', invite = null } = {}) {
+  /**
+   * invite: an open greeting ({ from, message }) that asks the visitor for their name.
+   * langChoice: show the language switch (not on a shared link: the sender chose).
+   */
+  showWelcome({ name = '', lang = 'en', invite = null, langChoice = true } = {}) {
     this.setLang('welcome', lang);
+    this.el.welcome.querySelector('.lang').hidden = !langChoice;
+    // An open greeting shows its wish, as the gift card does.
+    const wish = invite?.message ?? '';
+    this.el.welcomeMsg.textContent = wish ? `“${wish}”` : '';
+    this.el.welcomeMsg.hidden = !wish;
     this.el.gift.hidden = true;
     this.el.text.textContent = invite
       ? `${invite.from || 'Someone'} sent you a Diwali greeting. ${name ? 'Check your name and start the show' : 'Type your name'} to see it in fireworks.`

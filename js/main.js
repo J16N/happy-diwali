@@ -94,6 +94,10 @@ const link = {
   from: sanitize(params.get('from') ?? ''),
   message: sanitize(params.get('msg') ?? '', LIMITS.messageGraphemes),
   lang: okLang(params.get('lang')),
+  // Opened from a shared link (any of its parameters): the sender chose the
+  // language, so it is used as is, never offered for change, and never
+  // becomes this visitor's own default.
+  shared: ['to', 'name', 'from', 'msg', 'lang'].some((k) => params.has(k)),
 };
 /** An open greeting: from someone, for whoever opens it (asks for their name). */
 const isOpenGreeting = () => !link.to && !!(link.from || link.message);
@@ -101,11 +105,12 @@ const fromLink = !!link.to || isOpenGreeting();
 let name = link.to || me; // the name written in the sky
 let from = fromLink ? link.from : ''; // signed at the end of the show
 let message = fromLink ? link.message : '';
-let lang = (fromLink && link.lang) || myLang;
+let lang = (link.shared && link.lang) || myLang;
 
 /** Drop the link's names from the address bar (the visitor is making their own). */
 function leaveLink() {
   link.to = link.from = link.message = link.lang = '';
+  link.shared = false;
   from = message = '';
   lang = myLang;
   if (location.search) history.replaceState(null, '', location.pathname + location.hash);
@@ -193,12 +198,32 @@ function greetingUrl({ to, from: sender, message: msg, lang: l }) {
   return url.toString();
 }
 
-/** Starting from the welcome dialog: an open greeting keeps its wish and sender; anything else is the visitor's own show. */
-function keepOpenGreeting(l) {
-  if (!isOpenGreeting()) return leaveLink();
-  from = link.from;
-  message = link.message;
-  lang = okLang(l) || link.lang || myLang;
+/** The welcome dialog: an invitation for an open greeting; no language switch on a shared link. */
+function showWelcome(prefill = me) {
+  const shared = link.shared;
+  ui.showWelcome({
+    name: isOpenGreeting() ? me : prefill,
+    lang: shared ? link.lang || myLang : myLang,
+    invite: isOpenGreeting() ? link : null,
+    langChoice: !shared,
+  });
+}
+
+/**
+ * Starting from the welcome dialog. On the visitor's own page the language
+ * they picked becomes their default. On a shared link the link's language
+ * is kept (and not remembered), and an open greeting keeps its wish and
+ * sender.
+ */
+function beginFromWelcome(l) {
+  if (!link.shared) {
+    rememberLang(l);
+    leaveLink();
+    return;
+  }
+  lang = link.lang || myLang;
+  from = isOpenGreeting() ? link.from : '';
+  message = isOpenGreeting() ? link.message : '';
 }
 
 function rememberLang(l) {
@@ -300,17 +325,15 @@ function toggleFullscreen() {
 const ui = new UI({
   start(raw, l) {
     // The welcome dialog is always about the visitor themself.
-    rememberLang(l);
     me = sanitize(raw);
     if (me) store.set(STORAGE_KEYS.name, me);
     else store.remove(STORAGE_KEYS.name);
-    keepOpenGreeting(l);
+    beginFromWelcome(l);
     name = me;
     startShow();
   },
   skip(l) {
-    rememberLang(l);
-    keepOpenGreeting(l);
+    beginFromWelcome(l);
     name = '';
     startShow();
   },
@@ -318,14 +341,13 @@ const ui = new UI({
   makeOwn() {
     leaveLink();
     name = me;
-    ui.showWelcome({ name: me, lang: myLang });
+    showWelcome();
   },
   replay: () => startShow(),
   changeName() {
     sim.stop();
     cancelPress();
-    if (isOpenGreeting()) ui.showWelcome({ name: me, lang, invite: link });
-    else ui.showWelcome({ name: link.to ? me : name, lang: myLang });
+    showWelcome(link.to ? me : name);
   },
   toggleSound() {
     const muted = !sound.muted;
@@ -336,7 +358,7 @@ const ui = new UI({
   },
   share() {
     cancelPress();
-    ui.showShare({ from: me, lang });
+    ui.showShare({ from: me, lang: myLang }); // the visitor's own language, not a link's
   },
   async send({ to: rawTo, from: rawFrom, message: rawMsg, lang: l }) {
     const to = sanitize(rawTo, LIMITS.shareNameGraphemes);
@@ -655,8 +677,7 @@ size = layout();
 ui.setMuted(sound.muted);
 sim.igniteDiyas(); // light the diyas behind the welcome card
 if (link.to) ui.showGift(link, GREETINGS[lang].card);
-else if (isOpenGreeting()) ui.showWelcome({ name: me, lang, invite: link });
-else ui.showWelcome({ name: me, lang: myLang });
+else showWelcome();
 
 // Home-screen shortcuts (long-press the app icon): ?action=send / ?action=scan.
 const action = params.get('action');

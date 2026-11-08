@@ -75,7 +75,9 @@ js/
     lantern.js          sky lantern
   show/
     nameParser.js       sanitize, grapheme-aware tokenizing, scenes, message line wrapping
-    textRaster.js       text / emoji -> point clouds (ink-bounds layout)
+    textRaster.js       text / emoji -> point clouds (ink-bounds layout), packPoints for transfer
+    rasterAsync.js      raster() without stalling the animation: a helper worker when inside the simulation worker
+    raster.worker.js    that helper worker
     director.js         show script on a simulation clock; fire(id) for the wheel
   audio/sound.js        synthesised Web Audio voices, reverb, echo, distance filtering, recording tap
   ui/
@@ -103,11 +105,17 @@ World units are CSS pixels on the focal plane `z = 0`; larger `z` is further awa
 - Shells (`shells.js`) choose per-star drag `k = c / v0`, so every star decelerates on the same schedule: shapes (peony, heart, ring) keep their form while blooming.
 - Two gravities: `PHYS.gravity` for shells (far away, slow on screen) and `PHYS.nearGravity` for crackers on the terrace (right in front of the camera).
 - Anar height is a share of the open sky above the pot (0.45 to 0.85, random per pot), and the launch speed is solved with drag: `H = ln(1 + k v0² / g) / 2k`.
-- Text stars (`textStars.js`) are thrown out like shell stars, then pulled to their slots by an underdamped spring (`OMEGA 8.5`, `ZETA 0.5`) that ramps in over ~0.5 s: readable after ~0.6 s, settled by ~0.9 s. On release they burn out unevenly (fizzle, ember, glitter, crackle).
+- Text stars (`textStars.js`) are thrown out like shell stars, then pulled to their slots by an underdamped spring (`OMEGA 8.5`, `ZETA 0.5`) that ramps in over ~0.5 s: readable after ~0.6 s, settled by ~0.9 s. On release they burn out unevenly, mostly as short fizzles (58%), with some embers, glitter and crackle: trailing embers shed sparks of their own, and too many made the burn-out the heaviest moment of the show.
 
 ### Text and emoji rasterising (`textRaster.js`)
 
-Lines are laid out from **measured ink bounds** (each line is drawn on a padded canvas and scanned), never from `measureText` widths or fixed line heights. Hindi and Bengali need this: pre-base vowel signs (ি, ि), signs above and below the line, and synthesised bold all extend past the advance box. Emoji are drawn at 150 px on a padded canvas and cropped to their real pixels for the same reason. Emoji scenes burst all slices together so a picture never appears half-formed.
+Lines are laid out from **measured ink bounds** (each line is drawn on a padded canvas and scanned), never from `measureText` widths or fixed line heights. Hindi and Bengali need this: pre-base vowel signs (ি, ि), signs above and below the line, and synthesised bold all extend past the advance box. Emoji are drawn at 150 px on a padded canvas and cropped to their real pixels for the same reason. Emoji scenes burst all patches together so a picture never appears half-formed.
+
+Emoji contrast: faces are read from their dark details. A pixel becomes a gap only if it is much darker than its surroundings (under 0.55 of the mean brightness within ~12% of the glyph size) **and** dark pixels cover under 40% of those surroundings (summed-area tables, O(1) per point). So eyes, mouths and outlines are cut out, while dark shading (a diya's foot, a heart's tip) and large dark regions beside light ones (🇮🇳's green stripe) stay. Everything else is brightened by one gain for the whole emoji, capped per pixel so hues never clip to white, with a floor so shaded parts still show. Emoji stars are a little smaller than text stars so their glow does not fill the gaps.
+
+Rockets per scene (`Director.partition`): text gets one row per line (`rasterLines` tags each point with its `line`) and one rocket per character or per letter-width of ink (about 0.55 of the line's height), whichever is more, at most 10 per line and 22 per scene. The width count matters for Hindi and Bengali, where one character is a whole syllable (लक्ष्मी is 2 characters but 4 rockets), so shells break along the whole width of every line. Emoji get up to 3 height bands, each split into columns. Each break gets a little vertical jitter. With many rockets the sweep is shortened (≤ 1.6 s in all) and each break is a little smaller and dimmer.
+
+Rasterising never runs inside a simulation step: `rasterAsync.raster()` sends it to `raster.worker.js` (a worker started by the simulation worker) and the director awaits the result, so a scene change on a slow phone starts slightly later instead of freezing the animation. Points come back as one packed `Float32Array`. On the page (the fallback simulation), or if the helper fails or does not answer within 3 s, it runs directly. Canvases used for rasterising only grow (resizing reallocates them), ink bounds are found by scanning in from the edges, and sampling jumps straight to the step that fits the point budget.
 
 ### Simulation thread
 
@@ -148,7 +156,8 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 ### Names, links and storage
 
 - URL parameters: `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default), `renderer=2d`, `worker=0` (simulation on the page), `action=send|scan` (app shortcuts).
-- A link without `to` but with `from` or `msg` is an open greeting: the welcome dialog says who sent it and asks the visitor's name; the show then plays that name, the wish and the sender's sign-off (in the link's language unless the visitor picks another).
+- Opened from a shared link (any of `to`, `name`, `from`, `msg`, `lang` present): the link's language is used as is, the welcome dialog shows no language switch, and the language is never saved as the visitor's own (`diwali.lang` only changes when they pick one on their own page). The share dialog defaults to the visitor's own language, not a link's.
+- A link without `to` but with `from` or `msg` is an open greeting: the welcome dialog says who sent it, shows the wish, and asks the visitor's name; the show then plays that name, the wish and the sender's sign-off (in the link's language unless the visitor picks another).
 - Names from a link are never stored. localStorage keys (`STORAGE_KEYS`): `diwali.name` (the visitor's own name), `diwali.lang`, `diwali.muted`, `diwali.cracker`.
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.
 - Limits (`LIMITS`): own name 40, share To/From 30 (silent), wish 50 (with counter), 4 words per scene, 10 emoji scenes. A wish plays like a name (`parseMessage`): each run of words wraps into at most 4 sky lines, and each emoji gets its own firework, in reading order (up to 10).

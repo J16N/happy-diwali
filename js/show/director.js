@@ -8,8 +8,9 @@ import { COLORS, GREETINGS, LINE_RAMPS, PALETTE, TIMING, localDigits } from '../
 import { burst, subBurst, RANDOM_BURSTS } from '../crackers/shells.js';
 import { Anar, Chakra, Sparkler, Ladi, Bomb, Sutli, RomanCandle } from '../crackers/ground.js';
 import { SkyLantern } from '../crackers/lantern.js';
-import { parseMessage, parseName, tokenize } from './nameParser.js';
-import { centralBox, rasterLines, rasterEmoji } from './textRaster.js';
+import { graphemes, parseMessage, parseName, tokenize } from './nameParser.js';
+import { centralBox } from './textRaster.js';
+import { raster } from './rasterAsync.js';
 import { clamp, lerp, pick, rand } from '../utils.js';
 
 class Clock {
@@ -39,6 +40,19 @@ class Clock {
 
 // Ground decoration rotates per scene so every scene feels different.
 const DECOR = ['anars', 'candles', 'chakras', 'sparklers'];
+
+// Text rockets per scene at most (a long wish on a wide screen).
+const MAX_TEXT_ROCKETS = 22;
+
+/** Split an array into n runs of nearly equal length (in order). */
+const chunks = (arr, n) => {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const part = arr.slice(Math.round((i * arr.length) / n), Math.round(((i + 1) * arr.length) / n));
+    if (part.length) out.push(part);
+  }
+  return out;
+};
 
 const avgColor = (pts) => {
   let r = 0, g = 0, b = 0;
@@ -165,15 +179,18 @@ export class Director {
     return words.map((text, i) => ({ text, ramp: LINE_RAMPS[(sceneIdx + i) % LINE_RAMPS.length] }));
   }
 
-  playLines(lines, decor, tok) {
+  async playLines(lines, decor, tok) {
     const w = this.world;
-    const { points } = rasterLines(lines, centralBox(w.view), Math.round(w.budget.textPoints * w.density));
-    return this.play(points, decor, tok, TIMING.sweep);
+    const { points } = await raster('lines', lines, centralBox(w.view), Math.round(w.budget.textPoints * w.density));
+    if (tok.cancelled) return;
+    // One rocket per character of each line, so shells break all along it.
+    return this.play(points, decor, tok, TIMING.sweep, lines.map((l) => graphemes(l.text).length));
   }
 
   async playEmoji(emoji, decor, tok) {
     const w = this.world;
-    const { points } = rasterEmoji(emoji, centralBox(w.view), Math.round(w.budget.emojiPoints * w.density));
+    const { points } = await raster('emoji', emoji, centralBox(w.view), Math.round(w.budget.emojiPoints * w.density));
+    if (tok.cancelled) return;
     if (points.length < 12) {
       // No glyph available on this device: bloom instead of showing a blank.
       const b = centralBox(w.view);
@@ -186,23 +203,73 @@ export class Director {
     await this.play(points, decor, tok, 0.02);
   }
 
-  /** Split points into vertical slices, one rocket per slice. */
-  partition(points) {
-    const sorted = [...points].sort((a, b) => a.x - b.x);
-    const k = clamp(Math.round(sorted.length / 600), 3, 7);
-    const size = Math.ceil(sorted.length / k);
+  /**
+   * Split points into patches, one rocket each. Patches are rows, then
+   * columns, so the shells break at different heights: one row per line of
+   * text, and bands for an emoji. Splitting only into vertical slices put
+   * every break on one level, in the middle, which looked staged.
+   */
+  partition(points, chars) {
+    const n = points.length;
+    const k = clamp(Math.round(n / 500), 3, 9); // rockets in all (emoji)
+    if (points[0]?.line !== undefined) {
+      // Text: a row per line, a rocket per character (at most 10 per line and
+      // MAX_TEXT_ROCKETS in all), so the whole width of every line is covered
+      // by shells and no letter appears out of nowhere.
+      const lines = [];
+      for (const p of points) (lines[p.line] ??= []).push(p);
+      // Rockets per line: one per character, or one per letter-width of ink
+      // (about 0.55 of the line's height), whichever is more. Hindi and
+      // Bengali characters are whole syllables, often wide conjuncts (क्ष्मी),
+      // so counting characters alone gave them too few rockets.
+      const want = Array.from(lines, (row, i) => {
+        if (!row) return 0;
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const p of row) {
+          x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+          y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+        }
+        const byWidth = Math.round((x1 - x0) / Math.max(1, (y1 - y0) * 0.55));
+        return clamp(Math.max(chars?.[i] ?? 0, byWidth), 1, 10);
+      });
+      const total = want.reduce((a, b) => a + b, 0);
+      const f = Math.min(1, MAX_TEXT_ROCKETS / Math.max(1, total));
+      const groups = [];
+      lines.forEach((row, i) => {
+        if (row) groups.push(...chunks(row.sort((a, b) => a.x - b.x), Math.max(1, Math.round(want[i] * f))));
+      });
+      return groups;
+    }
+    // Emoji: up to 3 bands by height, each split into columns.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of points) {
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+      y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    const r = clamp(Math.round(Math.sqrt((k * (y1 - y0)) / Math.max(1, x1 - x0))), 1, 3);
+    const rows = chunks([...points].sort((a, b) => a.y - b.y), r);
     const groups = [];
-    for (let i = 0; i < sorted.length; i += size) groups.push(sorted.slice(i, i + size));
+    for (const row of rows) {
+      const cols = Math.max(1, Math.round((k * row.length) / n));
+      groups.push(...chunks([...row].sort((a, b) => a.x - b.x), cols));
+    }
     return groups;
   }
 
-  async play(points, decor, tok, sweep) {
+  async play(points, decor, tok, sweep, chars) {
     const w = this.world;
     const v = w.view;
-    const groups = this.partition(points);
+    const groups = this.partition(points, chars);
+    // Many rockets: keep the whole sweep short, and each break a little
+    // smaller and dimmer, so the scene costs about the same to draw.
+    sweep = Math.min(sweep, 1.6 / Math.max(1, groups.length - 1));
+    const many = Math.sqrt(Math.max(1, groups.length / 6));
     const specs = groups.map((g, i) => {
       const cx = g.reduce((s, p) => s + p.x, 0) / g.length;
-      const cy = g.reduce((s, p) => s + p.y, 0) / g.length;
+      // Break somewhere in the patch's height, not exactly at its middle.
+      let top = Infinity, bottom = -Infinity, sy = 0;
+      for (const p of g) { top = Math.min(top, p.y); bottom = Math.max(bottom, p.y); sy += p.y; }
+      const cy = sy / g.length + rand(-0.3, 0.3) * (bottom - top);
       const rise = clamp(0.9 + 1.0 * ((v.floorY - cy) / v.H) + rand(-0.06, 0.06), 1, 1.9);
       return { g, cx, cy, rise, burstAt: i * sweep, color: avgColor(g) };
     });
@@ -224,8 +291,8 @@ export class Director {
           onBurst: (x, y) => {
             if (tok.cancelled) return;
             w.stars.start(gid, x, y);
-            burst(w, 'peony', x, y, 0, s.color, 0.32, { boom: false, smoke: 0.35, light: 0.7 });
-            w.boom(x, y, 0, 0.85);
+            burst(w, 'peony', x, y, 0, s.color, 0.32 / Math.sqrt(many), { boom: false, smoke: 0.35 / many, light: 0.7 / many });
+            w.boom(x, y, 0, 0.85 / Math.sqrt(many));
           },
         });
       });

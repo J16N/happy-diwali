@@ -320,7 +320,8 @@ button:focus-visible, input:focus-visible {
 .card-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 /* Cards with corner controls get a strip of room for them above the title,
    so nothing overlaps at any width. */
-.card:has(> .lang), .card:has(> .card-close) { padding-top: 54px; }
+.lang[hidden] { display: none; }
+.card:has(> .lang:not([hidden])), .card:has(> .card-close) { padding-top: 54px; }
 
 /* "More" menu under the toolbar */
 .menu {

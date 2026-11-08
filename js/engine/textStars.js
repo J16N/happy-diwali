@@ -185,16 +185,19 @@ export class TextStars {
     const c = [this.r[i], this.g[i], this.b[i]];
     const x = this.x[i], y = this.y[i], z = this.z[i];
     const s = this.size[i];
+    // Mostly short fizzles: thousands of stars go out within ~0.6 s, and
+    // trailing embers and glitter each shed sparks of their own, so too many
+    // of them made the burn-out the heaviest moment of the show.
     const roll = Math.random();
-    if (roll < 0.38) {
+    if (roll < 0.58) {
       // Fizzles out where it hangs.
       pool.spawn(x, y, z, rand(-8, 8) * S, rand(-6, 10) * S, 0, rand(0.18, 0.55), s * 0.95, c,
         0.02 / S, g * 0.3, F.FLICKER, 0, 1.3);
-    } else if (roll < 0.8) {
+    } else if (roll < 0.86) {
       // Drops as an ember.
       pool.spawn(x, y, z, rand(-22, 22) * S, rand(-18, 8) * S, rand(-10, 10) * S, rand(1.0, 2.2), s * 0.9, c,
         0.009 / S, g, F.TRAIL | F.EMBER | F.TWINKLE, 0, 1.15);
-    } else if (roll < 0.93) {
+    } else if (roll < 0.94) {
       // Falls trailing glitter.
       pool.spawn(x, y, z, rand(-15, 15) * S, rand(-10, 10) * S, 0, rand(1.2, 2.0), s * 0.9, c,
         0.01 / S, g, F.TRAIL | F.EMBER | F.TAIL, 7, 1.1);
