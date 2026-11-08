@@ -52,6 +52,7 @@ css/styles.css          all styling: dialogs, Material-style outlined fields, wh
 js/
   main.js               boot, renderer and simulation choice, names/links/language state, input (tap / hold / wheel / keys),
                         recording, scanner, install, render loop, adaptive quality
+  linkCode.js           short greeting links: ?g= packs to / from / msg / lang (see Names, links and storage)
   config.js             colours, budgets, limits, timings, physics constants, GREETINGS, fonts, localDigits
   utils.js              random, easing, colour, Fibonacci sphere
   engine/
@@ -155,8 +156,9 @@ Everything is synthesised (no audio files). Voices → bus → dry + convolution
 
 ### Names, links and storage
 
-- URL parameters: `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default), `renderer=2d`, `worker=0` (simulation on the page), `action=send|scan` (app shortcuts).
-- Opened from a shared link (any of `to`, `name`, `from`, `msg`, `lang` present): the link's language is used as is, the welcome dialog shows no language switch, and the language is never saved as the visitor's own (`diwali.lang` only changes when they pick one on their own page). The share dialog defaults to the visitor's own language, not a link's.
+- Greeting links are `?g=<code>` (`linkCode.js`). Percent-encoding costs 9 URL characters per Hindi or Bengali letter and 12 per emoji, so the code packs the greeting into bytes: a header (version, language), then to / from / msg separated by `0x00`; ASCII is one byte, letters of the current 128-character window (starting at the link language's script) one byte, `0x01 b` moves the window, `0x02` / `0x03` carry any other character (emoji, joiners) in 2 / 3 bytes; then base64url. Hindi and Bengali greetings come out about 5.7x shorter (538 -> 97 characters for a full one), and their QR codes far smaller; English stays about the same (104 -> 108). The language index list is append-only, and a format change needs a new version number.
+- Older links spell the greeting out and still open (`readGreeting`): `to` (or legacy `name`), `from`, `msg`, `lang` (`hi` / `bn`; English is the default). Other URL parameters: `renderer=2d`, `worker=0` (simulation on the page), `action=send|scan` (app shortcuts).
+- Opened from a shared link (a `g` that decodes, or any of `to`, `name`, `from`, `msg`, `lang` present): the link's language is used as is, the welcome dialog shows no language switch, and the language is never saved as the visitor's own (`diwali.lang` only changes when they pick one on their own page). The share dialog defaults to the visitor's own language, not a link's.
 - A link without `to` but with `from` or `msg` is an open greeting: the welcome dialog says who sent it, shows the wish, and asks the visitor's name; the show then plays that name, the wish and the sender's sign-off (in the link's language unless the visitor picks another).
 - Names from a link are never stored. localStorage keys (`STORAGE_KEYS`): `diwali.name` (the visitor's own name), `diwali.lang`, `diwali.muted`, `diwali.cracker`.
 - All input goes through `sanitize(input, max)`: strips control and invisible characters (including U+FFFC "OBJ" left by pasted Genmoji/attachments), keeps ZWJ/ZWNJ inside words for Indic scripts, and caps by **graphemes**.

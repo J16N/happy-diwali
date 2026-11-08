@@ -10,6 +10,7 @@ import { CanvasRenderer } from './engine/render/canvas.js';
 import { Sound } from './audio/sound.js';
 import { centralBox } from './show/textRaster.js';
 import { sanitize } from './show/nameParser.js';
+import { encodeGreeting, readGreeting } from './linkCode.js';
 import { buildLayers } from './ui/backdrop.js';
 import { UI } from './ui/ui.js';
 import { Wheel } from './ui/wheel.js';
@@ -80,24 +81,27 @@ document.documentElement.dataset.sim = sim.mode;
 //   me    the visitor's own name, typed into the welcome dialog. It is the
 //         only name remembered in this browser, and the default "from" when
 //         they send a greeting.
-//   link  ?to=Priya&from=Jishan&msg=...&lang=hi: a greeting someone made
-//         for this visitor. It is never stored, so opening a friend's link
-//         does not overwrite your own name. (?name= is the older form of ?to=.)
+//   link  ?g=<code> (linkCode.js: to, from, msg and lang packed short): a
+//         greeting someone made for this visitor. It is never stored, so
+//         opening a friend's link does not overwrite your own name. Older
+//         links spell it out: ?to=Priya&from=Jishan&msg=...&lang=hi (?name=
+//         is the oldest form of ?to=).
 //         Without ?to= but with ?from= or ?msg= it is an open greeting: the
 //         visitor types their own name, and the show still carries the
 //         sender's wish and signature.
 const okLang = (l) => (GREETINGS[l] ? l : '');
 let me = sanitize(store.get(STORAGE_KEYS.name) ?? '');
 let myLang = okLang(store.get(STORAGE_KEYS.lang)) || 'en';
+const linked = readGreeting(params);
 const link = {
-  to: sanitize(params.get('to') ?? params.get('name') ?? ''),
-  from: sanitize(params.get('from') ?? ''),
-  message: sanitize(params.get('msg') ?? '', LIMITS.messageGraphemes),
-  lang: okLang(params.get('lang')),
-  // Opened from a shared link (any of its parameters): the sender chose the
+  to: sanitize(linked?.to),
+  from: sanitize(linked?.from),
+  message: sanitize(linked?.message, LIMITS.messageGraphemes),
+  lang: okLang(linked?.lang),
+  // Opened from a shared link (a greeting in the URL): the sender chose the
   // language, so it is used as is, never offered for change, and never
   // becomes this visitor's own default.
-  shared: ['to', 'name', 'from', 'msg', 'lang'].some((k) => params.has(k)),
+  shared: !!linked,
 };
 /** An open greeting: from someone, for whoever opens it (asks for their name). */
 const isOpenGreeting = () => !link.to && !!(link.from || link.message);
@@ -191,10 +195,7 @@ function startShow() {
 /** A link that writes `to` in the sky, signed by `from`. Works on any path (GitHub project pages too). */
 function greetingUrl({ to, from: sender, message: msg, lang: l }) {
   const url = new URL(location.pathname, location.origin);
-  if (to) url.searchParams.set('to', to);
-  if (sender) url.searchParams.set('from', sender);
-  if (msg) url.searchParams.set('msg', msg);
-  if (l && l !== 'en') url.searchParams.set('lang', l);
+  url.searchParams.set('g', encodeGreeting({ to, from: sender, message: msg, lang: l || 'en' }));
   return url.toString();
 }
 
@@ -468,7 +469,7 @@ function handleScanned(text) {
   if (!url) return;
   navigator.vibrate?.(30);
   scanned = url.toString();
-  const to = sanitize(url.searchParams.get('to') ?? url.searchParams.get('name') ?? '');
+  const to = sanitize(readGreeting(url.searchParams)?.to ?? '');
   ui.scanFound(to ? `A greeting for ${to}` : 'A Diwali greeting', { label: 'Open greeting' });
   setTimeout(() => scanned && !ui.el.scan.hidden && location.assign(scanned), 700);
 }

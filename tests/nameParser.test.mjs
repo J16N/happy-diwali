@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { parseName, parseMessage, tokenize, sanitize, isEmoji, messageLines } from '../js/show/nameParser.js';
 import { localDigits } from '../js/config.js';
+import { encodeGreeting, decodeGreeting, readGreeting } from '../js/linkCode.js';
 
 let passed = 0;
 const test = (label, fn) => {
@@ -140,6 +141,38 @@ test('the year is written in each language\'s own numerals', () => {
   assert.equal(localDigits(2026, 'hi'), '२०२६');
   assert.equal(localDigits(2026, 'bn'), '২০২৬');
   assert.equal(localDigits(2031, 'xx'), '2031'); // unknown language: plain digits
+});
+
+test('greeting links round-trip in every script, with emoji', () => {
+  const cases = [
+    { to: 'Lakshmi Narayan', from: 'Jishan', message: 'Wishing you a very happy Diwali 🪔✨', lang: 'en' },
+    { to: 'लक्ष्मी नारायण', from: 'जिशान', message: 'आपको दीपावली की शुभकामनाएं 🪔', lang: 'hi' },
+    { to: 'লক্ষ্মী নারায়ণ', from: 'জিশান', message: 'দীপাবলির শুভেচ্ছা ❤️ 🇮🇳 👨‍👩‍👧', lang: 'bn' },
+    { to: 'Zoë and नीता', from: '', message: 'শুভ দীপাবলি — 祝你 😀', lang: 'hi' },
+    { to: '', from: 'Asha', message: '', lang: 'en' },
+    { to: '', from: '', message: '', lang: 'bn' },
+  ];
+  for (const c of cases) {
+    const code = encodeGreeting(c);
+    assert.match(code, /^[A-Za-z0-9_-]+$/);
+    assert.deepEqual(decodeGreeting(code), c);
+  }
+});
+
+test('greeting links are short for Hindi and Bengali', () => {
+  const c = { to: 'लक्ष्मी नारायण', from: 'जिशान', message: 'आपको और आपके परिवार को दीपावली की शुभकामनाएं 🪔', lang: 'hi' };
+  const old = new URLSearchParams({ to: c.to, from: c.from, msg: c.message, lang: c.lang }).toString();
+  assert.ok(encodeGreeting(c).length * 5 < old.length);
+});
+
+test('broken codes are rejected and old links still read', () => {
+  for (const bad of ['', '!!!', 'AAAA', encodeGreeting({ to: 'x' }).replace(/^./, '_'), 'EQE']) assert.equal(decodeGreeting(bad), null);
+  assert.deepEqual(readGreeting(new URLSearchParams('name=Priya&lang=hi')), { to: 'Priya', from: '', message: '', lang: 'hi' });
+  assert.deepEqual(readGreeting(new URLSearchParams('to=Priya&from=Jishan&msg=Hi')), { to: 'Priya', from: 'Jishan', message: 'Hi', lang: '' });
+  assert.equal(readGreeting(new URLSearchParams('g=broken!&renderer=2d')), null);
+  assert.equal(readGreeting(new URLSearchParams('action=send')), null);
+  const g = encodeGreeting({ to: 'Priya', lang: 'bn' });
+  assert.deepEqual(readGreeting(new URLSearchParams(`g=${g}`)), { to: 'Priya', from: '', message: '', lang: 'bn' });
 });
 
 console.log(`\n${passed} tests passed`);
